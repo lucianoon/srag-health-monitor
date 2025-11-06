@@ -1,0 +1,72 @@
+graph TB
+    subgraph "Camada de Apresentação"
+        USER[👤 Usuário/Profissional de Saúde]
+    end
+    
+    subgraph "Camada de Orquestração"
+        AGENT[🤖 Agente Orquestrador<br/>LangGraph + GPT-4.1-mini]
+        AUDIT[📋 Sistema de Auditoria<br/>Logging Estruturado]
+        GUARD[🛡️ Guardrails<br/>Validação e Segurança]
+    end
+    
+    subgraph "Camada de Ferramentas (Tools)"
+        DB_TOOL[🗄️ Database Query Tool<br/>Consulta de Métricas]
+        NEWS_TOOL[📰 News Search Tool<br/>Busca de Notícias]
+        CHART_TOOL[📊 Chart Generation Tool<br/>Geração de Gráficos]
+    end
+    
+    subgraph "Camada de Dados"
+        SQLITE[(💾 SQLite Database<br/>Casos de SRAG)]
+        NEWS_API[🌐 Fontes de Notícias<br/>Web/APIs]
+        CHARTS[📈 Gráficos PNG<br/>Matplotlib]
+    end
+    
+    subgraph "Camada de Processamento"
+        PROCESSOR[⚙️ Data Processor<br/>Pandas + NumPy]
+        DATASUS[📥 DATASUS CSV<br/>~265k registros]
+    end
+    
+    subgraph "Camada de Saída"
+        REPORT[📄 Relatório Markdown<br/>Análise Epidemiológica]
+        LOGS[📝 Logs de Auditoria<br/>JSONL]
+    end
+    
+    USER -->|Solicita Relatório| AGENT
+    
+    AGENT -->|Valida Entrada| GUARD
+    GUARD -->|OK| AGENT
+    
+    AGENT -->|Consulta Métricas| DB_TOOL
+    AGENT -->|Busca Notícias| NEWS_TOOL
+    AGENT -->|Gera Gráficos| CHART_TOOL
+    
+    DB_TOOL -->|Query SQL| SQLITE
+    NEWS_TOOL -->|HTTP Request| NEWS_API
+    CHART_TOOL -->|Matplotlib| CHARTS
+    
+    SQLITE -->|Retorna Dados| DB_TOOL
+    NEWS_API -->|Retorna Notícias| NEWS_TOOL
+    CHARTS -->|Retorna Path| CHART_TOOL
+    
+    DB_TOOL -->|Métricas| AGENT
+    NEWS_TOOL -->|Notícias| AGENT
+    CHART_TOOL -->|Gráficos| AGENT
+    
+    AGENT -->|Valida Saída| GUARD
+    GUARD -->|OK| AGENT
+    
+    AGENT -->|Compila| REPORT
+    AGENT -->|Registra Decisões| AUDIT
+    
+    AUDIT -->|Salva| LOGS
+    REPORT -->|Entrega| USER
+    
+    DATASUS -->|Processa| PROCESSOR
+    PROCESSOR -->|Carrega| SQLITE
+    
+    style AGENT fill:#4A90E2,stroke:#2E5C8A,color:#fff
+    style GUARD fill:#E74C3C,stroke:#C0392B,color:#fff
+    style AUDIT fill:#F39C12,stroke:#D68910,color:#fff
+    style SQLITE fill:#27AE60,stroke:#1E8449,color:#fff
+    style REPORT fill:#9B59B6,stroke:#7D3C98,color:#fff
+    style USER fill:#34495E,stroke:#2C3E50,color:#fff
