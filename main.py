@@ -15,20 +15,15 @@ import argparse
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from agents.orchestrator import SRAGReportOrchestrator
-from guardrails.validators import InputValidator, OutputValidator, DataPrivacyGuard
+from guardrails.validators import OutputValidator, DataPrivacyGuard
 from guardrails.audit_logger import audit_logger, execution_tracker
+from utils.paths import ensure_directory
 
 
 def main():
     """Função principal."""
     parser = argparse.ArgumentParser(
-        description='SRAG Health Monitor - Sistema de Monitoramento Inteligente de SRAG'
-    )
-    parser.add_argument(
-        '--model',
-        type=str,
-        default='gpt-4.1-mini',
-        help='Modelo LLM a utilizar (padrão: gpt-4.1-mini)'
+        description='SRAG Health Monitor - Sistema de Monitoramento Epidemiológico de SRAG'
     )
     parser.add_argument(
         '--output-dir',
@@ -40,21 +35,18 @@ def main():
     args = parser.parse_args()
     
     print("="*80)
-    print("SRAG Health Monitor - Sistema de Monitoramento Inteligente")
+    print("SRAG Health Monitor - Sistema de Monitoramento Epidemiológico")
     print("="*80)
     print(f"\nData/Hora: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
-    print(f"Modelo LLM: {args.model}")
-    print(f"Diretório de Saída: {args.output_dir}\n")
-    
-    # Verificar variável de ambiente
-    if not os.getenv('OPENAI_API_KEY'):
-        print("❌ ERRO: Variável de ambiente OPENAI_API_KEY não configurada")
-        print("Configure com: export OPENAI_API_KEY='sua-chave-api'")
-        sys.exit(1)
-    
+    resolved_output_dir = ensure_directory(args.output_dir)
+
+    print(f"Diretório de Saída: {resolved_output_dir}\n")
+
     # Criar orquestrador
-    print("🤖 Inicializando orquestrador...")
-    orchestrator = SRAGReportOrchestrator(model_name=args.model)
+    print("🔄 Inicializando orquestrador...")
+    orchestrator = SRAGReportOrchestrator(
+        output_dir=resolved_output_dir
+    )
     execution_id = orchestrator.execution_id
     
     # Iniciar rastreamento
@@ -66,7 +58,7 @@ def main():
             decision="Iniciar geração de relatório",
             reasoning="Execução solicitada via script principal",
             execution_id=execution_id,
-            metadata={"model": args.model}
+            metadata={}
         )
         
         print(f"📋 ID de Execução: {execution_id}\n")
@@ -75,7 +67,8 @@ def main():
         print("⚙️  Gerando relatório...")
         start_time = datetime.now()
         
-        report = orchestrator.run()
+        run_result = orchestrator.run()
+        report = run_result["report"]
         
         end_time = datetime.now()
         duration_ms = (end_time - start_time).total_seconds() * 1000
@@ -109,7 +102,7 @@ def main():
         print("\n" + "="*80)
         print("RELATÓRIO GERADO COM SUCESSO")
         print("="*80)
-        print(f"\n📄 Arquivo: outputs/reports/relatorio_{execution_id}.md")
+        print(f"\n📄 Arquivo: {run_result['report_path']}")
         print(f"⏱️  Duração: {duration_ms:.2f}ms")
         print(f"🔧 Ferramentas utilizadas: {summary['total_tool_calls']}")
         print(f"✓  Validações: {summary['total_validations']}")
@@ -117,10 +110,13 @@ def main():
         # Registrar sucesso
         audit_logger.log_report_generation(
             execution_id=execution_id,
-            metrics=orchestrator.collect_metrics(),
-            news_count=5,
-            charts_generated=2,
-            report_path=f"outputs/reports/relatorio_{execution_id}.md",
+            metrics=run_result["metrics"],
+            news_count=len(run_result["news"].get("news", [])),
+            charts_generated=sum(
+                1 for chart in run_result["charts"].values()
+                if isinstance(chart, dict) and chart.get("success")
+            ),
+            report_path=run_result["report_path"],
             duration_ms=duration_ms
         )
         

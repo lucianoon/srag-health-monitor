@@ -2,7 +2,7 @@
 Sistema de Auditoria e Logging Estruturado.
 
 Este módulo implementa um sistema completo de auditoria para rastrear
-todas as decisões e operações do agente.
+todas as decisões e operações do orquestrador.
 """
 
 import json
@@ -12,36 +12,47 @@ from typing import Dict, Any, Optional
 from pathlib import Path
 import uuid
 
+from utils.paths import LOGS_DIR, ensure_directory
+
 
 class AuditLogger:
     """Logger de auditoria para rastreamento de operações."""
     
-    def __init__(self, log_dir: str = "/home/ubuntu/srag-health-monitor/outputs/logs"):
+    def __init__(self, log_dir: str = str(LOGS_DIR)):
         """
         Inicializa o audit logger.
         
         Args:
             log_dir: Diretório para salvar logs
         """
-        self.log_dir = Path(log_dir)
-        self.log_dir.mkdir(parents=True, exist_ok=True)
-        
+        self.log_dir = ensure_directory(log_dir)
+
         # Configurar logger
         self.logger = logging.getLogger("audit")
         self.logger.setLevel(logging.INFO)
-        
+
         # Handler para arquivo JSON
         log_file = self.log_dir / f"audit_{datetime.now().strftime('%Y%m%d')}.jsonl"
-        handler = logging.FileHandler(log_file)
-        handler.setFormatter(logging.Formatter('%(message)s'))
-        self.logger.addHandler(handler)
-        
+        if not any(
+            isinstance(handler, logging.FileHandler)
+            and Path(getattr(handler, "baseFilename", "")) == log_file
+            for handler in self.logger.handlers
+        ):
+            handler = logging.FileHandler(log_file)
+            handler.setFormatter(logging.Formatter('%(message)s'))
+            self.logger.addHandler(handler)
+
         # Handler para console
-        console_handler = logging.StreamHandler()
-        console_handler.setFormatter(
-            logging.Formatter('%(asctime)s - AUDIT - %(message)s')
-        )
-        self.logger.addHandler(console_handler)
+        if not any(
+            isinstance(handler, logging.StreamHandler)
+            and not isinstance(handler, logging.FileHandler)
+            for handler in self.logger.handlers
+        ):
+            console_handler = logging.StreamHandler()
+            console_handler.setFormatter(
+                logging.Formatter('%(asctime)s - AUDIT - %(message)s')
+            )
+            self.logger.addHandler(console_handler)
     
     def log_event(self, event_type: str, data: Dict[str, Any], 
                   execution_id: Optional[str] = None):
@@ -66,7 +77,7 @@ class AuditLogger:
     def log_agent_decision(self, decision: str, reasoning: str, 
                           execution_id: str, metadata: Optional[Dict] = None):
         """
-        Registra uma decisão do agente.
+        Registra uma decisão do orquestrador.
         
         Args:
             decision: Decisão tomada

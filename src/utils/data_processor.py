@@ -15,11 +15,8 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Tuple
 import logging
 
-# Configurar logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+from utils.paths import PROCESSED_DATA_DIR, RAW_DATA_DIR
+
 logger = logging.getLogger(__name__)
 
 
@@ -300,13 +297,13 @@ class SRAGDataProcessor:
 
 if __name__ == "__main__":
     # Teste do processador
-    processor = SRAGDataProcessor('/home/ubuntu/srag-health-monitor/data/raw/srag_2024.csv')
+    processor = SRAGDataProcessor(str(RAW_DATA_DIR / 'srag_2024.csv'))
     processor.load_data()
     processor.clean_data()
-    
+
     stats = processor.get_statistics()
     print("\n=== Estatísticas dos Dados ===")
     for key, value in stats.items():
         print(f"{key}: {value}")
-    
-    processor.save_processed_data('/home/ubuntu/srag-health-monitor/data/processed/srag_2024_processed.csv')
+
+    processor.save_processed_data(str(PROCESSED_DATA_DIR / 'srag_2024_processed.csv'))

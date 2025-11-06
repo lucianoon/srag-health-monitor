@@ -1,38 +1,23 @@
-"""
-Ferramenta de consulta ao banco de dados para o agente de IA.
+"""Ferramenta de consulta ao banco de dados de SRAG."""
 
-Esta ferramenta permite que o agente consulte métricas e dados do banco de SRAG.
-"""
-
-from langchain.tools import BaseTool
+from dataclasses import dataclass
 from typing import Dict, Any, Optional
-from pydantic import BaseModel, Field
-import sys
-import os
-
-# Adicionar path do projeto
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from database.db_manager import SRAGDatabase
+from utils.paths import DEFAULT_DB_PATH, resolve_path
+from .base import ToolBase
 
 
-class DatabaseQueryInput(BaseModel):
-    """Input para a ferramenta de consulta ao banco de dados."""
-    query_type: str = Field(
-        description="Tipo de consulta: 'metrics' para métricas principais, "
-                    "'daily_cases' para casos diários, 'monthly_cases' para casos mensais"
-    )
-    days: Optional[int] = Field(
-        default=30,
-        description="Número de dias para consultas temporais (padrão: 30)"
-    )
-    months: Optional[int] = Field(
-        default=12,
-        description="Número de meses para consultas mensais (padrão: 12)"
-    )
+@dataclass
+class DatabaseQueryInput:
+    """Estrutura simples de entrada para documentação da ferramenta."""
+
+    query_type: str
+    days: int = 30
+    months: int = 12
 
 
-class DatabaseQueryTool(BaseTool):
+class DatabaseQueryTool(ToolBase):
     """Ferramenta para consultar o banco de dados de SRAG."""
     
     name: str = "database_query"
@@ -43,8 +28,12 @@ class DatabaseQueryTool(BaseTool):
         "Use 'daily_cases' para obter casos diários dos últimos N dias. "
         "Use 'monthly_cases' para obter casos mensais dos últimos N meses."
     )
-    args_schema: type[BaseModel] = DatabaseQueryInput
-    db_path: str = "/home/ubuntu/srag-health-monitor/data/srag.db"
+    args_schema: type[DatabaseQueryInput] = DatabaseQueryInput
+
+    def __init__(self, db_path: Optional[str] = None, **kwargs):
+        super().__init__(**kwargs)
+        resolved = resolve_path(db_path) if db_path is not None else DEFAULT_DB_PATH
+        self.db_path = str(resolved)
     
     def _run(self, query_type: str, days: int = 30, months: int = 12) -> Dict[str, Any]:
         """
@@ -58,13 +47,10 @@ class DatabaseQueryTool(BaseTool):
         Returns:
             Dicionário com os resultados da consulta
         """
-        db = SRAGDatabase(self.db_path)
-        db.connect()
-        
-        try:
+        with SRAGDatabase(self.db_path) as db:
             if query_type == "metrics":
                 result = db.get_all_metrics()
-                
+
             elif query_type == "daily_cases":
                 cases = db.get_daily_cases(last_n_days=days)
                 result = {
@@ -85,10 +71,7 @@ class DatabaseQueryTool(BaseTool):
                 
             else:
                 result = {"error": f"Tipo de consulta inválido: {query_type}"}
-                
-        finally:
-            db.close()
-        
+
         return result
     
     async def _arun(self, query_type: str, days: int = 30, months: int = 12) -> Dict[str, Any]:
@@ -97,9 +80,9 @@ class DatabaseQueryTool(BaseTool):
 
 
 # Função auxiliar para criar a ferramenta
-def create_database_tool() -> DatabaseQueryTool:
+def create_database_tool(db_path: Optional[str] = None) -> DatabaseQueryTool:
     """Cria e retorna uma instância da ferramenta de banco de dados."""
-    return DatabaseQueryTool()
+    return DatabaseQueryTool(db_path=db_path)
 
 
 if __name__ == "__main__":

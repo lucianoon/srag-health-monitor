@@ -1,25 +1,23 @@
 # SRAG Health Monitor 🏥
 
-Sistema de Monitoramento Inteligente de Surtos de SRAG (Síndrome Respiratória Aguda Grave) utilizando Inteligência Artificial Generativa para análise de dados e geração automatizada de relatórios epidemiológicos.
+Sistema de monitoramento de surtos de SRAG (Síndrome Respiratória Aguda Grave) que automatiza a coleta de dados, geração de gráficos e produção de relatórios epidemiológicos.
 
 [![Python](https://img.shields.io/badge/Python-3.11-blue.svg)](https://www.python.org/)
-[![LangChain](https://img.shields.io/badge/LangChain-Latest-green.svg)](https://www.langchain.com/)
-[![OpenAI](https://img.shields.io/badge/OpenAI-GPT--4.1-orange.svg)](https://openai.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ## 📋 Sobre o Projeto
 
-Este projeto foi desenvolvido como parte da certificação de **Artificial Intelligence Engineer** pela Indicium HealthCare Inc. O objetivo é criar uma solução baseada em IA Generativa que auxilie profissionais da área da saúde a ter um entendimento em tempo real sobre a severidade e o avanço de surtos de doenças respiratórias.
+O projeto foi desenvolvido para consolidar diferentes fontes de informação sobre SRAG em um fluxo único e reprodutível. O objetivo é oferecer uma visão atualizada do cenário epidemiológico, reunindo métricas calculadas a partir do banco de dados, notícias de apoio e artefatos prontos para visualização.
 
 ### Características Principais
 
-- **Agente Orquestrador Inteligente**: Utiliza LangGraph e GPT-4.1-mini para coordenar análises complexas
-- **Consulta Automatizada de Dados**: Acessa banco de dados com ~265 mil registros do DATASUS
-- **Busca de Notícias em Tempo Real**: Contextualiza métricas com informações atualizadas
-- **Geração de Visualizações**: Cria gráficos automaticamente para análise temporal
-- **Relatórios Automatizados**: Compila análises completas em formato Markdown
-- **Governança e Auditoria**: Sistema completo de logging e rastreabilidade
-- **Guardrails de Segurança**: Validações em múltiplas camadas e proteção de dados (LGPD)
+- **Orquestrador Automatizado**: Coordena consultas ao banco, busca notícias e gera o relatório final sem dependências de IA generativa.
+- **Consulta Automatizada de Dados**: Acessa banco de dados com ~265 mil registros do DATASUS.
+- **Busca de Notícias Contextuais**: Consulta feeds RSS em tempo real (com fallback offline opcional).
+- **Geração de Visualizações**: Cria gráficos SVG prontos para incorporar nos relatórios.
+- **Relatórios Automatizados**: Compila análises completas em formato Markdown.
+- **Governança e Auditoria**: Sistema completo de logging e rastreabilidade.
+- **Guardrails de Segurança**: Validações em múltiplas camadas e proteção de dados (LGPD).
 
 ## 🏗️ Arquitetura
 
@@ -28,7 +26,7 @@ Este projeto foi desenvolvido como parte da certificação de **Artificial Intel
 A solução é composta por 6 camadas principais:
 
 1. **Camada de Apresentação**: Interface com usuários/profissionais de saúde
-2. **Camada de Orquestração**: Agente principal, auditoria e guardrails
+2. **Camada de Orquestração**: Orquestrador principal, auditoria e guardrails
 3. **Camada de Ferramentas**: Database Query, News Search e Chart Generation
 4. **Camada de Dados**: SQLite, APIs de notícias e gráficos
 5. **Camada de Processamento**: ETL de dados do DATASUS
@@ -60,7 +58,6 @@ Além disso, gera:
 
 - Python 3.11+
 - pip3
-- Variável de ambiente `OPENAI_API_KEY` configurada
 
 ### Instalação
 
@@ -72,9 +69,13 @@ cd srag-health-monitor
 # Instale as dependências
 pip3 install -r requirements.txt
 
-# Configure a variável de ambiente
-export OPENAI_API_KEY="sua-chave-api"
 ```
+
+### Configuração Opcional de Notícias em Tempo Real
+
+- Por padrão, a ferramenta de notícias consulta o feed RSS do Google News filtrado para SRAG em português.
+- Para utilizar outra fonte, defina a variável de ambiente `SRAG_NEWS_RSS_URL` com uma URL que aceite o placeholder `{query}`.
+- Ajuste o tempo máximo de espera (timeout) configurando `SRAG_NEWS_TIMEOUT` (em segundos), se necessário.
 
 ### Estrutura do Projeto
 
@@ -82,7 +83,7 @@ export OPENAI_API_KEY="sua-chave-api"
 srag-health-monitor/
 ├── src/
 │   ├── agents/
-│   │   └── orchestrator.py          # Agente orquestrador principal
+│   │   └── orchestrator.py          # Orquestrador principal do relatório
 │   ├── tools/
 │   │   ├── database_tool.py         # Ferramenta de consulta ao BD
 │   │   ├── news_tool.py             # Ferramenta de busca de notícias
@@ -110,22 +111,22 @@ srag-health-monitor/
 
 ## 💻 Uso
 
-### 1. Processar Dados do DATASUS
+### 1. Preparar Banco de Dados com o CSV do DATASUS
+
+1. Faça o download do arquivo CSV bruto (SIVEP-Gripe/SRAG 2024) no [Open DATASUS](https://datasus.saude.gov.br/).
+2. Salve o arquivo em `data/raw/srag2024.csv` (ou informe outro caminho via `--raw-csv`).
+3. Execute o script de preparação:
 
 ```bash
-python3.11 src/utils/data_processor.py
+python3.11 scripts/prepare_database.py --raw-csv data/raw/srag2024.csv
 ```
 
-### 2. Criar e Popular Banco de Dados
+O comando processa o CSV, gera `data/processed/srag_2024_processed.csv` e popula o banco `data/srag.db`.
+
+### 2. Gerar Relatório
 
 ```bash
-python3.11 src/database/db_manager.py
-```
-
-### 3. Gerar Relatório
-
-```bash
-python3.11 src/agents/orchestrator.py
+python3.11 main.py --output-dir outputs/reports
 ```
 
 O relatório será gerado em `outputs/reports/relatorio_YYYYMMDD_HHMMSS.md`
@@ -148,7 +149,7 @@ print(report)
 
 ### Sistema de Auditoria
 
-Todas as decisões do agente são registradas em logs estruturados (JSONL):
+Todas as decisões do orquestrador são registradas em logs estruturados (JSONL):
 
 ```json
 {
@@ -202,12 +203,11 @@ Os relatórios incluem:
 ## 🛠️ Tecnologias Utilizadas
 
 - **Python 3.11**: Linguagem principal
-- **LangChain/LangGraph**: Framework de agentes de IA
-- **OpenAI GPT-4.1-mini**: Modelo de linguagem
 - **SQLite**: Banco de dados
 - **Pandas**: Processamento de dados
-- **Matplotlib**: Visualizações
-- **BeautifulSoup**: Web scraping (notícias)
+- **NumPy**: Cálculos auxiliares
+- **unittest**: Testes automatizados
+- **Logging**: Auditoria e rastreabilidade
 
 ## 📝 Critérios de Avaliação Atendidos
 
@@ -263,7 +263,7 @@ Os dados utilizados são provenientes do **OpenDATASUS**, especificamente do sis
 
 ## 👨‍💻 Autor
 
-Desenvolvido como projeto de certificação em **Artificial Intelligence Engineer**.
+Desenvolvido como projeto de certificação focado em monitoramento epidemiológico.
 
 ## 📄 Licença
 

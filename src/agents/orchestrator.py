@@ -1,66 +1,34 @@
-"""
-Agente Orquestrador para geração de relatórios de SRAG.
+"""Coordenador para geração de relatórios de SRAG."""
 
-Este agente coordena as ferramentas disponíveis para gerar relatórios
-automatizados sobre a situação de SRAG no Brasil.
-"""
-
-from typing import TypedDict, Annotated, Sequence
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
-import operator
-import os
-import sys
+from typing import Optional
 import json
 import logging
 from datetime import datetime
-
-# Adicionar path do projeto
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from pathlib import Path
 
 from tools.database_tool import create_database_tool
 from tools.news_tool import create_news_tool
 from tools.chart_tool import create_chart_tool
+from utils.paths import REPORTS_DIR, ensure_directory, resolve_path
 
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-
-class AgentState(TypedDict):
-    """Estado do agente durante a execução."""
-    messages: Annotated[Sequence[BaseMessage], operator.add]
-    metrics: dict
-    daily_cases: dict
-    monthly_cases: dict
-    news: dict
-    charts: dict
-    report: str
-    execution_id: str
-    timestamp: str
 
 
 class SRAGReportOrchestrator:
     """Orquestrador para geração de relatórios de SRAG."""
-    
-    def __init__(self, model_name: str = "gpt-4.1-mini"):
-        """
-        Inicializa o orquestrador.
-        
-        Args:
-            model_name: Nome do modelo LLM a usar
-        """
-        self.model_name = model_name
-        self.llm = ChatOpenAI(model=model_name, temperature=0.3)
-        
-        # Criar ferramentas
+
+    def __init__(self, output_dir: Optional[str | Path] = None):
+        """Inicializa o orquestrador."""
         self.database_tool = create_database_tool()
         self.news_tool = create_news_tool()
         self.chart_tool = create_chart_tool()
-        
+
         # ID de execução
         self.execution_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
-        logger.info(f"Orquestrador inicializado com modelo {model_name}")
+        self.output_dir = resolve_path(output_dir) if output_dir is not None else REPORTS_DIR
+        self.last_run: Optional[dict] = None
+
+        logger.info("Orquestrador inicializado para geração de relatório")
     
     def collect_metrics(self) -> dict:
         """Coleta métricas do banco de dados."""
@@ -86,17 +54,24 @@ class SRAGReportOrchestrator:
         result = self.news_tool._run(max_results=max_results)
         return result
     
-    def generate_charts(self, daily_data: dict, monthly_data: dict) -> dict:
+    def generate_charts(
+        self,
+        daily_data: dict,
+        monthly_data: dict,
+        output_dir: Optional[Path] = None
+    ) -> dict:
         """Gera gráficos de visualização."""
         logger.info("Gerando gráficos de visualização")
         
         charts = {}
+        output_location = ensure_directory(output_dir or self.output_dir)
         
         # Gráfico diário
         if 'daily_cases' in daily_data:
             daily_result = self.chart_tool._run(
                 chart_type="daily",
-                data=json.dumps(daily_data['daily_cases'])
+                data=json.dumps(daily_data['daily_cases']),
+                output_path=str(output_location)
             )
             charts['daily'] = daily_result
         
@@ -104,7 +79,8 @@ class SRAGReportOrchestrator:
         if 'monthly_cases' in monthly_data:
             monthly_result = self.chart_tool._run(
                 chart_type="monthly",
-                data=json.dumps(monthly_data['monthly_cases'])
+                data=json.dumps(monthly_data['monthly_cases']),
+                output_path=str(output_location)
             )
             charts['monthly'] = monthly_result
         
@@ -219,12 +195,12 @@ Com base nos dados mais recentes do DATASUS, foram registrados **{metrics.get('t
         
         return report
     
-    def run(self) -> str:
+    def run(self, output_dir: Optional[str | Path] = None) -> dict:
         """
         Executa o processo completo de geração de relatório.
         
         Returns:
-            Relatório em formato Markdown
+            Dicionário com o relatório gerado e dados auxiliares
         """
         logger.info(f"Iniciando geração de relatório - ID: {self.execution_id}")
         
@@ -240,19 +216,30 @@ Com base nos dados mais recentes do DATASUS, foram registrados **{metrics.get('t
             news = self.collect_news(max_results=5)
             
             # 4. Gerar gráficos
-            charts = self.generate_charts(daily_cases, monthly_cases)
-            
+            report_directory = ensure_directory(output_dir or self.output_dir)
+
+            charts = self.generate_charts(daily_cases, monthly_cases, report_directory)
+
             # 5. Gerar relatório
             report = self.generate_report(metrics, news, charts)
-            
+
             # 6. Salvar relatório
-            report_path = f"/home/ubuntu/srag-health-monitor/outputs/reports/relatorio_{self.execution_id}.md"
-            with open(report_path, 'w', encoding='utf-8') as f:
-                f.write(report)
-            
+            report_path = report_directory / f"relatorio_{self.execution_id}.md"
+            report_path.write_text(report, encoding='utf-8')
+
             logger.info(f"Relatório salvo em: {report_path}")
-            
-            return report
+
+            self.last_run = {
+                "report": report,
+                "metrics": metrics,
+                "daily_cases": daily_cases,
+                "monthly_cases": monthly_cases,
+                "news": news,
+                "charts": charts,
+                "report_path": str(report_path),
+            }
+
+            return self.last_run
             
         except Exception as e:
             logger.error(f"Erro ao gerar relatório: {e}")
@@ -262,9 +249,9 @@ Com base nos dados mais recentes do DATASUS, foram registrados **{metrics.get('t
 if __name__ == "__main__":
     # Teste do orquestrador
     orchestrator = SRAGReportOrchestrator()
-    report = orchestrator.run()
-    
+    result = orchestrator.run()
+
     print("\n" + "="*80)
     print("RELATÓRIO GERADO")
     print("="*80)
-    print(report[:500] + "...")
+    print(result["report"][:500] + "...")

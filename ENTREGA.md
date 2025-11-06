@@ -1,23 +1,23 @@
-# Entrega - Certificação AI Engineer
+# Entrega - Monitoramento Epidemiológico SRAG
 
 ## Informações do Projeto
 
 **Nome do Projeto**: SRAG Health Monitor  
 **Repositório GitHub**: https://github.com/lucianoon/srag-health-monitor  
 **Data de Entrega**: 06/11/2025  
-**Certificação**: Artificial Intelligence Engineer - Indicium HealthCare Inc.
+**Certificação**: Indicium HealthCare Inc.
 
 ---
 
 ## Resumo Executivo
 
-O **SRAG Health Monitor** é um sistema completo de monitoramento inteligente de surtos de SRAG (Síndrome Respiratória Aguda Grave) que utiliza Inteligência Artificial Generativa para análise automatizada de dados epidemiológicos e geração de relatórios contextualizados.
+O **SRAG Health Monitor** é um sistema completo de monitoramento automatizado de surtos de SRAG (Síndrome Respiratória Aguda Grave) que consolida dados epidemiológicos, gera artefatos de visualização e produz relatórios contextualizados.
 
 ### Principais Características
 
-✅ **Agente Orquestrador Inteligente** com LangGraph e GPT-4.1-mini  
+✅ **Orquestrador Automatizado** que coordena consultas e geração de relatórios
 ✅ **Consulta Automatizada** a banco de dados com 265.087 registros do DATASUS  
-✅ **Busca de Notícias em Tempo Real** para contextualização  
+✅ **Busca de Notícias em Tempo Real** via feeds RSS (com fallback offline)
 ✅ **Geração Automática de Visualizações** (gráficos diários e mensais)  
 ✅ **Relatórios Completos** em formato Markdown  
 ✅ **Sistema de Governança e Auditoria** com logging estruturado  
@@ -34,7 +34,7 @@ O **SRAG Health Monitor** é um sistema completo de monitoramento inteligente de
 A solução implementa uma arquitetura em 6 camadas:
 
 1. **Camada de Apresentação**: Interface com usuários
-2. **Camada de Orquestração**: Agente principal + Auditoria + Guardrails
+2. **Camada de Orquestração**: Orquestrador principal + Auditoria + Guardrails
 3. **Camada de Ferramentas**: Database Query, News Search, Chart Generation
 4. **Camada de Dados**: SQLite, APIs de notícias, gráficos
 5. **Camada de Processamento**: ETL de dados DATASUS
@@ -44,11 +44,10 @@ A solução implementa uma arquitetura em 6 camadas:
 
 ### 2. Componentes Principais
 
-#### 2.1 Agente Orquestrador (`src/agents/orchestrator.py`)
+#### 2.1 Orquestrador (`src/agents/orchestrator.py`)
 - Coordena execução de todas as ferramentas
-- Utiliza LangGraph para orquestração
-- GPT-4.1-mini como LLM principal
-- Geração automatizada de relatórios
+- Organiza consultas, geração de gráficos e montagem do relatório
+- Geração automatizada de relatórios em Markdown
 
 #### 2.2 Ferramentas (Tools)
 
@@ -57,7 +56,8 @@ A solução implementa uma arquitetura em 6 camadas:
 - Retorna dados para gráficos (diários e mensais)
 
 **News Search Tool** (`src/tools/news_tool.py`)
-- Busca notícias recentes sobre SRAG
+- Consulta feeds RSS em tempo real para notícias sobre SRAG
+- Aplica fallback controlado para ambientes offline
 - Contextualiza métricas com informações atualizadas
 
 **Chart Generation Tool** (`src/tools/chart_tool.py`)
@@ -68,6 +68,7 @@ A solução implementa uma arquitetura em 6 camadas:
 - SQLite com 265.087 registros
 - Dados processados do DATASUS 2024
 - Índices otimizados para consultas temporais
+- Script `scripts/prepare_database.py` automatiza processamento + carga
 
 #### 2.4 Processamento de Dados (`src/utils/data_processor.py`)
 - ETL completo de dados DATASUS
@@ -82,7 +83,7 @@ A solução implementa uma arquitetura em 6 camadas:
 
 #### 2.6 Sistema de Auditoria (`src/guardrails/audit_logger.py`)
 - Logging estruturado em JSONL
-- Rastreamento de decisões do agente
+- Rastreamento de decisões do orquestrador
 - Métricas de performance
 - Rastreabilidade completa
 
@@ -129,7 +130,7 @@ A solução implementa uma arquitetura em 6 camadas:
 **Implementação:**
 - Sistema completo de auditoria (`src/guardrails/audit_logger.py`)
 - Logging estruturado em JSONL
-- Rastreamento de todas as decisões do agente
+- Rastreamento de todas as decisões do orquestrador
 - Métricas de performance e execução
 
 **Evidências:**
@@ -248,7 +249,7 @@ python3.11 tests/test_suite.py
 ## Arquivos de Entrega
 
 ### Código-Fonte
-- ✅ `src/agents/orchestrator.py` - Agente orquestrador
+- ✅ `src/agents/orchestrator.py` - Orquestrador de relatórios
 - ✅ `src/tools/` - Ferramentas (database, news, chart)
 - ✅ `src/database/db_manager.py` - Gerenciador de banco
 - ✅ `src/utils/data_processor.py` - Processador de dados
@@ -292,12 +293,11 @@ Todas as execuções são registradas em logs estruturados:
 ## Tecnologias Utilizadas
 
 - **Python 3.11** - Linguagem principal
-- **LangChain/LangGraph** - Framework de agentes
-- **OpenAI GPT-4.1-mini** - Modelo de linguagem
-- **SQLite** - Banco de dados
+- **SQLite** - Banco de dados relacional leve
 - **Pandas** - Processamento de dados
-- **Matplotlib** - Visualizações
-- **BeautifulSoup** - Web scraping
+- **NumPy** - Cálculos auxiliares
+- **unittest** - Testes automatizados
+- **Logging** - Observabilidade e auditoria
 
 ---
 
@@ -313,10 +313,10 @@ Todas as execuções são registradas em logs estruturados:
 
 ## Conclusão
 
-O **SRAG Health Monitor** é uma solução completa e profissional que atende a todos os requisitos da certificação de **Artificial Intelligence Engineer**. O sistema demonstra competência em:
+O **SRAG Health Monitor** é uma solução completa e profissional para monitoramento epidemiológico, demonstrando competência em:
 
-1. **Construção de soluções baseadas em IA Generativa**
-2. **Consulta e análise de dados em tempo real**
+1. **Automação de pipelines de dados**
+2. **Consulta e análise de dados em tempo quase real**
 3. **Geração automatizada de relatórios**
 4. **Governança e transparência**
 5. **Segurança e conformidade com LGPD**

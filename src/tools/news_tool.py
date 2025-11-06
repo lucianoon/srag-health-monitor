@@ -1,133 +1,194 @@
-"""
-Ferramenta de busca de notícias sobre SRAG para o agente de IA.
+"""Ferramenta de busca de notícias sobre SRAG."""
 
-Esta ferramenta permite que o agente busque notícias recentes sobre SRAG.
-"""
+from __future__ import annotations
 
-from langchain.tools import BaseTool
-from typing import Dict, Any, List
-from pydantic import BaseModel, Field
-import requests
-from bs4 import BeautifulSoup
-from datetime import datetime, timedelta
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 import logging
+import os
+import re
+from typing import Any, Dict, Iterable, List
+from urllib.parse import quote_plus, urlparse
+from urllib.request import Request, urlopen
+from xml.etree import ElementTree as ET
 
-logging.basicConfig(level=logging.INFO)
+from .base import ToolBase
+
 logger = logging.getLogger(__name__)
 
 
-class NewsSearchInput(BaseModel):
-    """Input para a ferramenta de busca de notícias."""
-    query: str = Field(
-        default="SRAG síndrome respiratória aguda grave Brasil",
-        description="Termo de busca para notícias (padrão: SRAG)"
-    )
-    max_results: int = Field(
-        default=5,
-        description="Número máximo de resultados (padrão: 5)"
-    )
+DEFAULT_RSS_URL = (
+    "https://news.google.com/rss/search?q={query}&hl=pt-BR&gl=BR&ceid=BR:pt-419"
+)
 
 
-class NewsSearchTool(BaseTool):
+@dataclass
+class NewsSearchInput:
+    """Estrutura de entrada para documentação da ferramenta."""
+
+    query: str = "SRAG síndrome respiratória aguda grave Brasil"
+    max_results: int = 5
+
+
+class NewsSearchTool(ToolBase):
     """Ferramenta para buscar notícias sobre SRAG."""
-    
+
     name: str = "news_search"
     description: str = (
         "Busca notícias recentes sobre SRAG (Síndrome Respiratória Aguda Grave) "
-        "e outros temas relacionados a saúde pública no Brasil. "
-        "Retorna título, resumo, fonte e data das notícias encontradas."
+        "em fontes públicas. Retorna título, resumo, fonte e data das notícias "
+        "encontradas, com fallback automático para conteúdo simulado caso a "
+        "consulta em tempo real falhe."
     )
-    args_schema: type[BaseModel] = NewsSearchInput
-    
-    def _search_google_news(self, query: str, max_results: int = 5) -> List[Dict[str, str]]:
-        """
-        Busca notícias usando Google News (simulado).
-        
-        Args:
-            query: Termo de busca
-            max_results: Número máximo de resultados
-            
-        Returns:
-            Lista de notícias encontradas
-        """
-        # Simulação de notícias (em produção, usar API real ou web scraping)
-        # Para PoC, retornar notícias simuladas baseadas em contexto real
-        
-        news = [
+    args_schema: type[NewsSearchInput] = NewsSearchInput
+
+    def __init__(self, *, rss_url: str | None = None, request_timeout: float = 10.0) -> None:
+        super().__init__()
+        self.rss_url_template = rss_url or os.getenv("SRAG_NEWS_RSS_URL", DEFAULT_RSS_URL)
+        timeout_env = os.getenv("SRAG_NEWS_TIMEOUT")
+        self.request_timeout = float(timeout_env) if timeout_env else float(request_timeout)
+
+    # -------------------------- Internal helpers -------------------------
+    def _build_feed_url(self, query: str) -> str:
+        encoded_query = quote_plus(query)
+        return self.rss_url_template.format(query=encoded_query)
+
+    @staticmethod
+    def _clean_text(value: str | None) -> str:
+        if not value:
+            return ""
+        no_tags = re.sub(r"<[^>]+>", " ", value)
+        compact = re.sub(r"\s+", " ", no_tags).strip()
+        return compact
+
+    @staticmethod
+    def _extract_source(url: str | None, fallback: str = "Fonte não informada") -> str:
+        if url:
+            parsed = urlparse(url)
+            if parsed.netloc:
+                return parsed.netloc.replace("www.", "")
+        return fallback
+
+    def _parse_items(self, xml_text: str, max_results: int) -> List[Dict[str, str]]:
+        root = ET.fromstring(xml_text)
+        channel_items: Iterable[ET.Element] = root.findall(".//item")
+
+        news_items: List[Dict[str, str]] = []
+        for item in channel_items:
+            title = self._clean_text(item.findtext("title"))
+            description = self._clean_text(item.findtext("description"))
+            link = (item.findtext("link") or "").strip()
+            source_tag = item.find("source")
+            source = (
+                self._clean_text(source_tag.text)
+                if source_tag is not None and source_tag.text
+                else self._extract_source(link)
+            )
+
+            published_raw = item.findtext("pubDate") or ""
+            try:
+                published_dt = parsedate_to_datetime(published_raw)
+                if published_dt is not None:
+                    published = published_dt.strftime("%Y-%m-%d")
+                else:
+                    raise ValueError("Data inválida")
+            except Exception:  # noqa: BLE001 - fallback controlado
+                published = datetime.now(UTC).strftime("%Y-%m-%d")
+
+            news_items.append(
+                {
+                    "title": title or "Notícia sem título",
+                    "summary": description or "Sem resumo disponível.",
+                    "source": source,
+                    "date": published,
+                    "url": link,
+                }
+            )
+
+            if len(news_items) >= max_results:
+                break
+
+        return news_items
+
+    def _fetch_live_news(self, query: str, max_results: int) -> List[Dict[str, str]]:
+        url = self._build_feed_url(query)
+        logger.debug("Buscando notícias em %s", url)
+
+        request = Request(url, headers={"User-Agent": "SRAGHealthMonitor/1.0"})
+
+        with urlopen(request, timeout=self.request_timeout) as response:  # noqa: S310 - URL controlada
+            xml_bytes = response.read()
+
+        xml_text = xml_bytes.decode("utf-8", errors="ignore")
+        news = self._parse_items(xml_text, max_results)
+        return news
+
+    @staticmethod
+    def _fallback_news(max_results: int) -> List[Dict[str, str]]:
+        now = datetime.now(UTC)
+        simulated = [
             {
-                "title": "Casos de SRAG aumentam em todo o Brasil durante inverno",
-                "summary": "O Ministério da Saúde registrou aumento de 15% nos casos de Síndrome Respiratória Aguda Grave (SRAG) nas últimas semanas, especialmente nas regiões Sul e Sudeste. Autoridades recomendam vacinação e cuidados preventivos.",
-                "source": "Ministério da Saúde",
-                "date": (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d"),
-                "url": "https://www.gov.br/saude"
+                "title": "SRAG: autoridades reforçam vigilância em capitais brasileiras",
+                "summary": (
+                    "Secretarias estaduais de Saúde ampliam o monitoramento de vírus respiratórios após incremento "
+                    "nos atendimentos por síndrome respiratória aguda grave nas últimas semanas."
+                ),
+                "source": "Simulação SRAG",
+                "date": (now).strftime("%Y-%m-%d"),
+                "url": "",
             },
             {
-                "title": "Taxa de ocupação de UTIs por SRAG preocupa especialistas",
-                "summary": "Especialistas alertam para o aumento da taxa de ocupação de leitos de UTI por pacientes com SRAG. A taxa atual está em torno de 28%, acima da média histórica. Hospitais reforçam protocolos de atendimento.",
-                "source": "Fiocruz",
-                "date": (datetime.now() - timedelta(days=5)).strftime("%Y-%m-%d"),
-                "url": "https://portal.fiocruz.br"
+                "title": "Campanhas de vacinação ganham reforço para conter casos graves",
+                "summary": (
+                    "Esforço conjunto entre municípios busca elevar a cobertura de vacinação contra gripe e COVID-19, "
+                    "priorizando grupos vulneráveis e profissionais de saúde."
+                ),
+                "source": "Simulação SRAG",
+                "date": (now).strftime("%Y-%m-%d"),
+                "url": "",
             },
             {
-                "title": "Vacinação contra gripe e COVID-19 é reforçada em campanha nacional",
-                "summary": "O governo federal lançou nova campanha de vacinação contra gripe e COVID-19, visando aumentar a cobertura vacinal e reduzir casos graves de SRAG. Meta é vacinar 90% da população prioritária.",
-                "source": "Agência Brasil",
-                "date": (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d"),
-                "url": "https://agenciabrasil.ebc.com.br"
+                "title": "Hospitais reorganizam leitos de UTI diante da sazonalidade",
+                "summary": (
+                    "Unidades hospitalares ajustam a disponibilidade de leitos para antecipar possíveis picos de "
+                    "demandas por SRAG durante o período de maior circulação viral."
+                ),
+                "source": "Simulação SRAG",
+                "date": (now).strftime("%Y-%m-%d"),
+                "url": "",
             },
-            {
-                "title": "Mortalidade por SRAG mantém-se estável em 2024",
-                "summary": "Dados do DATASUS mostram que a taxa de mortalidade por SRAG em 2024 está em 7,6%, similar ao ano anterior. Especialistas atribuem estabilidade ao aumento da vacinação e melhoria nos protocolos de tratamento.",
-                "source": "DATASUS",
-                "date": (datetime.now() - timedelta(days=10)).strftime("%Y-%m-%d"),
-                "url": "https://datasus.saude.gov.br"
-            },
-            {
-                "title": "Vigilância epidemiológica intensifica monitoramento de vírus respiratórios",
-                "summary": "A Secretaria de Vigilância em Saúde ampliou o monitoramento de vírus respiratórios em todo o país. Além de influenza e COVID-19, também são monitorados VSR, parainfluenza e outros patógenos.",
-                "source": "SVS/MS",
-                "date": (datetime.now() - timedelta(days=12)).strftime("%Y-%m-%d"),
-                "url": "https://www.gov.br/saude/pt-br/composicao/svsa"
-            }
         ]
-        
-        return news[:max_results]
-    
-    def _run(self, query: str = "SRAG síndrome respiratória aguda grave Brasil", 
-             max_results: int = 5) -> Dict[str, Any]:
-        """
-        Executa a busca de notícias.
-        
-        Args:
-            query: Termo de busca
-            max_results: Número máximo de resultados
-            
-        Returns:
-            Dicionário com as notícias encontradas
-        """
-        logger.info(f"Buscando notícias sobre: {query}")
-        
+        return simulated[:max_results]
+
+    # ------------------------------- Public API -------------------------------
+    def _run(self, query: str = "SRAG síndrome respiratória aguda grave Brasil", max_results: int = 5) -> Dict[str, Any]:
+        """Executa a busca de notícias."""
+
+        logger.info("Buscando notícias sobre: %s", query)
+        metadata: Dict[str, Any] = {
+            "query": query,
+            "timestamp": datetime.now(UTC).isoformat(),
+            "source_feed": self.rss_url_template,
+            "fallback": False,
+        }
+
         try:
-            news = self._search_google_news(query, max_results)
-            
-            result = {
-                "query": query,
-                "total_results": len(news),
-                "news": news,
-                "timestamp": datetime.now().isoformat()
-            }
-            
-            logger.info(f"{len(news)} notícias encontradas")
-            return result
-            
-        except Exception as e:
-            logger.error(f"Erro ao buscar notícias: {e}")
-            return {
-                "error": str(e),
-                "query": query,
-                "news": []
-            }
-    
+            news = self._fetch_live_news(query, max_results)
+            if not news:
+                raise ValueError("Feed sem notícias para o termo informado")
+        except Exception as exc:  # noqa: BLE001 - queremos capturar exceções de rede/parsing
+            logger.warning("Falha ao buscar notícias em tempo real: %s", exc)
+            metadata["fallback"] = True
+            metadata["error"] = str(exc)
+            news = self._fallback_news(max_results)
+
+        metadata["total_results"] = len(news)
+        metadata["news"] = news
+
+        logger.info("%s notícias retornadas (fallback=%s)", len(news), metadata["fallback"])
+        return metadata
+
     async def _arun(self, query: str = "SRAG", max_results: int = 5) -> Dict[str, Any]:
         """Versão assíncrona (não implementada)."""
         raise NotImplementedError("Versão assíncrona não implementada")
@@ -135,19 +196,19 @@ class NewsSearchTool(BaseTool):
 
 def create_news_tool() -> NewsSearchTool:
     """Cria e retorna uma instância da ferramenta de notícias."""
+
     return NewsSearchTool()
 
 
 if __name__ == "__main__":
-    # Teste da ferramenta
     tool = create_news_tool()
-    
+
     print("\n=== Teste: Busca de Notícias sobre SRAG ===")
     result = tool._run(max_results=3)
-    
+
     print(f"\nQuery: {result['query']}")
-    print(f"Total de resultados: {result['total_results']}\n")
-    
+    print(f"Total de resultados: {result['total_results']} (fallback={result['fallback']})\n")
+
     for i, news_item in enumerate(result['news'], 1):
         print(f"{i}. {news_item['title']}")
         print(f"   Fonte: {news_item['source']} | Data: {news_item['date']}")

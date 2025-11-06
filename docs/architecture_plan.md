@@ -2,13 +2,13 @@
 
 ## Visão Geral
 
-Sistema de monitoramento inteligente de surtos de SRAG (Síndrome Respiratória Aguda Grave) utilizando IA Generativa para análise de dados e geração automatizada de relatórios.
+Sistema de monitoramento automatizado de surtos de SRAG (Síndrome Respiratória Aguda Grave) que integra coleta de dados, geração de artefatos e produção de relatórios.
 
 ## Componentes Principais
 
-### 1. Agente Orquestrador (LangGraph)
+### 1. Orquestrador
 - **Função**: Coordenar o fluxo de execução entre ferramentas
-- **Tecnologia**: LangGraph com GPT-4.1-mini
+- **Tecnologia**: Python puro
 - **Responsabilidades**:
   - Receber requisições de geração de relatório
   - Orquestrar chamadas às ferramentas
@@ -24,7 +24,7 @@ Sistema de monitoramento inteligente de surtos de SRAG (Síndrome Respiratória 
 
 #### 2.2 News Search Tool
 - Buscar notícias em tempo real sobre SRAG
-- Fontes: APIs de notícias e web scraping
+- Fontes: feeds RSS públicos (ex.: Google News) com fallback offline
 - Processar e extrair informações relevantes
 
 #### 2.3 Chart Generation Tool
@@ -45,7 +45,7 @@ Sistema de monitoramento inteligente de surtos de SRAG (Síndrome Respiratória 
   - Colunas relevantes: data, UF, município, idade, evolução, UTI, vacinação
 
 ### 4. Sistema de Governança e Auditoria
-- **Logging estruturado**: Todas as decisões do agente
+- **Logging estruturado**: Todas as decisões do orquestrador
 - **Rastreabilidade**: ID de execução único por relatório
 - **Métricas**: Tempo de execução, tokens utilizados, fontes consultadas
 
@@ -63,28 +63,26 @@ Sistema de monitoramento inteligente de surtos de SRAG (Síndrome Respiratória 
 ## Fluxo de Execução
 
 ```
-Usuário → Agente Orquestrador → [
+Usuário → Orquestrador → [
     ├─ Database Query Tool → Métricas + Dados para gráficos
     ├─ News Search Tool → Notícias contextuais
-    ├─ Chart Generation Tool → Gráficos visuais
+    ├─ Chart Generation Tool → Artefatos visuais
     └─ Report Generator Tool → Relatório final
-] → Auditoria/Logging → Saída (PDF/Markdown)
+] → Auditoria/Logging → Saída (Markdown)
 ```
 
 ## Tecnologias Utilizadas
 
 - **Python 3.11**: Linguagem principal
-- **LangChain/LangGraph**: Framework de agentes
-- **OpenAI GPT-4.1-mini**: LLM principal
 - **SQLite**: Banco de dados
 - **Pandas**: Processamento de dados
-- **Matplotlib/Plotly**: Visualizações
-- **BeautifulSoup/Requests**: Web scraping
-- **FPDF/ReportLab**: Geração de PDF
+- **NumPy**: Cálculos auxiliares
+- **Logging**: Auditoria e rastreamento
+- **unittest**: Testes automatizados
 
 ## Critérios de Avaliação Atendidos
 
-1. **Arquitetura**: Modular, escalável, baseada em agentes
+1. **Arquitetura**: Modular, escalável, orientada a serviços
 2. **Governança**: Sistema completo de logging e auditoria
 3. **Guardrails**: Validações em múltiplas camadas
 4. **Dados Sensíveis**: Anonimização e conformidade com LGPD

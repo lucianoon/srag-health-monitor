@@ -8,12 +8,12 @@ Este módulo é responsável por:
 """
 
 import sqlite3
-import pandas as pd
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
 import logging
 
-logging.basicConfig(level=logging.INFO)
+from utils.paths import DEFAULT_DB_PATH, PROCESSED_DATA_DIR
+
 logger = logging.getLogger(__name__)
 
 
@@ -33,7 +33,9 @@ class SRAGDatabase:
     def connect(self):
         """Estabelece conexão com o banco de dados."""
         logger.info(f"Conectando ao banco de dados: {self.db_path}")
-        self.conn = sqlite3.connect(self.db_path)
+        if self.conn is None:
+            self.conn = sqlite3.connect(self.db_path)
+            self.conn.row_factory = sqlite3.Row
         return self.conn
     
     def close(self):
@@ -41,7 +43,15 @@ class SRAGDatabase:
         if self.conn:
             self.conn.close()
             logger.info("Conexão com banco de dados fechada")
+            self.conn = None
     
+    def __enter__(self):
+        self.connect()
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
+
     def create_tables(self):
         """Cria as tabelas do banco de dados."""
         logger.info("Criando tabelas do banco de dados")
@@ -96,9 +106,13 @@ class SRAGDatabase:
         """
         logger.info(f"Carregando dados de {csv_path}")
         
+        # Importação atrasada para evitar dependência obrigatória em ambientes
+        # onde pandas não esteja disponível por padrão (ex.: pipelines de teste).
+        import pandas as pd  # noqa: PLC0415
+
         # Ler CSV
         df = pd.read_csv(csv_path)
-        
+
         # Mapear colunas para o banco
         df_db = pd.DataFrame({
             'dt_notific': pd.to_datetime(df['DT_NOTIFIC']),
@@ -124,10 +138,10 @@ class SRAGDatabase:
             'dispneia': df.get('DISPNEIA'),
             'saturacao': df.get('SATURACAO'),
         })
-        
+
         # Inserir no banco
         df_db.to_sql('casos_srag', self.conn, if_exists='append', index=False)
-        
+
         logger.info(f"{len(df_db)} registros inseridos no banco de dados")
     
     def get_total_cases(self) -> int:
@@ -199,6 +213,30 @@ class SRAGDatabase:
         
         return (vacinados / total) * 100
     
+    def _get_latest_notification_date(self) -> Optional[datetime]:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT MAX(dt_notific) FROM casos_srag")
+        value = cursor.fetchone()[0]
+
+        if not value:
+            return None
+
+        if isinstance(value, datetime):
+            return value
+
+        value_str = str(value)
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(value_str, fmt)
+            except ValueError:
+                continue
+
+        try:
+            return datetime.fromisoformat(value_str)
+        except ValueError:
+            logger.warning("Não foi possível interpretar data '%s' do banco", value_str)
+            return None
+
     def get_growth_rate(self, period_days: int = 30) -> float:
         """
         Calcula a taxa de aumento de casos.
@@ -210,29 +248,34 @@ class SRAGDatabase:
             Taxa de crescimento em percentual
         """
         cursor = self.conn.cursor()
-        
-        # Obter data máxima
-        cursor.execute("SELECT MAX(dt_notific) FROM casos_srag")
-        max_date_str = cursor.fetchone()[0]
-        max_date = datetime.strptime(max_date_str, '%Y-%m-%d %H:%M:%S')
+
+        max_date = self._get_latest_notification_date()
+        if max_date is None:
+            return 0.0
         
         # Período atual
         current_start = max_date - timedelta(days=period_days)
-        cursor.execute("""
-            SELECT COUNT(*) 
-            FROM casos_srag 
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM casos_srag
             WHERE dt_notific >= ?
-        """, (current_start.strftime('%Y-%m-%d'),))
+        """,
+            (current_start.strftime('%Y-%m-%d'),)
+        )
         current_cases = cursor.fetchone()[0]
         
         # Período anterior
         previous_start = current_start - timedelta(days=period_days)
         previous_end = current_start
-        cursor.execute("""
-            SELECT COUNT(*) 
-            FROM casos_srag 
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM casos_srag
             WHERE dt_notific >= ? AND dt_notific < ?
-        """, (previous_start.strftime('%Y-%m-%d'), previous_end.strftime('%Y-%m-%d')))
+        """,
+            (previous_start.strftime('%Y-%m-%d'), previous_end.strftime('%Y-%m-%d'))
+        )
         previous_cases = cursor.fetchone()[0]
         
         if previous_cases == 0:
@@ -251,25 +294,28 @@ class SRAGDatabase:
             Lista de tuplas (data, número_de_casos)
         """
         cursor = self.conn.cursor()
-        
-        # Obter data máxima
-        cursor.execute("SELECT MAX(dt_notific) FROM casos_srag")
-        max_date_str = cursor.fetchone()[0]
-        max_date = datetime.strptime(max_date_str, '%Y-%m-%d %H:%M:%S')
+
+        max_date = self._get_latest_notification_date()
+        if max_date is None:
+            return []
         
         cutoff_date = max_date - timedelta(days=last_n_days)
         
-        cursor.execute("""
-            SELECT 
+        cursor.execute(
+            """
+            SELECT
                 DATE(dt_notific) as data,
                 COUNT(*) as casos
             FROM casos_srag
             WHERE dt_notific >= ?
             GROUP BY DATE(dt_notific)
             ORDER BY data
-        """, (cutoff_date.strftime('%Y-%m-%d'),))
+        """,
+            (cutoff_date.strftime('%Y-%m-%d'),)
+        )
         
-        return cursor.fetchall()
+        rows = cursor.fetchall()
+        return [(row["data"], row["casos"]) if isinstance(row, sqlite3.Row) else row for row in rows]
     
     def get_monthly_cases(self, last_n_months: int = 12) -> List[Tuple[str, int]]:
         """
@@ -294,7 +340,11 @@ class SRAGDatabase:
         """, (last_n_months,))
         
         results = cursor.fetchall()
-        return list(reversed(results))  # Ordem cronológica
+        ordered = list(reversed(results))  # Ordem cronológica
+        return [
+            (row["mes"], row["casos"]) if isinstance(row, sqlite3.Row) else row
+            for row in ordered
+        ]
     
     def get_all_metrics(self) -> Dict[str, float]:
         """
@@ -314,14 +364,14 @@ class SRAGDatabase:
 
 if __name__ == "__main__":
     # Teste do banco de dados
-    db = SRAGDatabase('/home/ubuntu/srag-health-monitor/data/srag.db')
+    db = SRAGDatabase(str(DEFAULT_DB_PATH))
     db.connect()
     db.create_tables()
-    db.load_data_from_csv('/home/ubuntu/srag-health-monitor/data/processed/srag_2024_processed.csv')
-    
+    db.load_data_from_csv(str(PROCESSED_DATA_DIR / 'srag_2024_processed.csv'))
+
     print("\n=== Métricas do Banco de Dados ===")
     metrics = db.get_all_metrics()
     for key, value in metrics.items():
         print(f"{key}: {value:.2f}")
-    
+
     db.close()

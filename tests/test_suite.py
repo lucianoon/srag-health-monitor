@@ -9,7 +9,10 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
+from pathlib import Path
+import tempfile
+from unittest.mock import Mock, patch
 
 from database.db_manager import SRAGDatabase
 from tools.database_tool import create_database_tool
@@ -19,18 +22,82 @@ from guardrails.validators import (
     InputValidator, OutputValidator, DataPrivacyGuard, RateLimiter
 )
 
+def _seed_database(db: SRAGDatabase):
+    """Populate the provided database with deterministic sample data."""
+    db.create_tables()
+    cursor = db.conn.cursor()
 
-class TestDatabaseManager(unittest.TestCase):
+    base_date = datetime(2024, 1, 1)
+    rows = []
+    for i in range(60):
+        current_date = base_date + timedelta(days=i)
+        row = (
+            current_date.strftime('%Y-%m-%d'),
+            current_date.strftime('%Y-%m-%d'),
+            'SP',
+            '3550308',
+            1,
+            30 + (i % 20),
+            1,
+            1 if i % 5 == 0 else 0,
+            0,
+            1 if i % 6 == 0 else 0,
+            current_date.strftime('%Y-%m-%d'),
+            current_date.strftime('%Y-%m-%d'),
+            1,
+            1,
+            1 if i % 3 == 0 else 0,
+            current_date.strftime('%Y-%m-%d'),
+            current_date.strftime('%Y-%m-%d'),
+            1,
+            1,
+            1,
+            1,
+            1,
+        )
+        rows.append(row)
+
+        if i >= 30:
+            rows.append(row)
+
+    cursor.executemany(
+        """
+        INSERT INTO casos_srag (
+            dt_notific, dt_sin_pri, sg_uf, co_mun_res, cs_sexo, idade_anos,
+            evolucao, obito, uti, internou_uti, dt_entuti, dt_saiduti,
+            vacina, vacina_cov, vacinado, dt_evoluca, dt_interna,
+            hospitalizado, febre, tosse, dispneia, saturacao
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        rows,
+    )
+    db.conn.commit()
+
+
+class DatabaseTestMixin:
+    """Shared setup for tests that require a populated database."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls._tmp_dir = tempfile.TemporaryDirectory()
+        cls.db_path = Path(cls._tmp_dir.name) / "test.db"
+
+        with SRAGDatabase(str(cls.db_path)) as db:
+            _seed_database(db)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._tmp_dir.cleanup()
+
+
+class TestDatabaseManager(DatabaseTestMixin, unittest.TestCase):
     """Testes para o gerenciador de banco de dados."""
-    
+
     def setUp(self):
-        """Configuração antes de cada teste."""
-        self.db_path = "/home/ubuntu/srag-health-monitor/data/srag.db"
-        self.db = SRAGDatabase(self.db_path)
+        self.db = SRAGDatabase(str(self.db_path))
         self.db.connect()
-    
+
     def tearDown(self):
-        """Limpeza após cada teste."""
         self.db.close()
     
     def test_get_total_cases(self):
@@ -57,12 +124,12 @@ class TestDatabaseManager(unittest.TestCase):
         self.assertLessEqual(rate, 100, "Taxa deve ser <= 100")
 
 
-class TestDatabaseTool(unittest.TestCase):
+class TestDatabaseTool(DatabaseTestMixin, unittest.TestCase):
     """Testes para a ferramenta de consulta ao banco."""
     
     def setUp(self):
         """Configuração antes de cada teste."""
-        self.tool = create_database_tool()
+        self.tool = create_database_tool(str(self.db_path))
     
     def test_query_metrics(self):
         """Testa consulta de métricas."""
@@ -90,23 +157,66 @@ class TestDatabaseTool(unittest.TestCase):
 
 class TestNewsTool(unittest.TestCase):
     """Testes para a ferramenta de busca de notícias."""
-    
+
+    SAMPLE_FEED = """<?xml version="1.0" encoding="UTF-8"?>
+    <rss version="2.0">
+      <channel>
+        <title>SRAG News</title>
+        <item>
+          <title>Casos de SRAG crescem em capitais brasileiras</title>
+          <link>https://example.com/noticia1</link>
+          <description><![CDATA[Autoridades reforçam campanhas de vacinação.]]></description>
+          <pubDate>Tue, 05 Mar 2024 10:00:00 GMT</pubDate>
+        </item>
+        <item>
+          <title>Novas diretrizes para ocupação de UTI</title>
+          <link>https://example.com/noticia2</link>
+          <description><![CDATA[Hospitais reorganizam leitos diante da sazonalidade.]]></description>
+          <pubDate>Mon, 04 Mar 2024 08:30:00 GMT</pubDate>
+        </item>
+      </channel>
+    </rss>"""
+
     def setUp(self):
         """Configuração antes de cada teste."""
         self.tool = create_news_tool()
-    
-    def test_search_news(self):
-        """Testa busca de notícias."""
-        result = self.tool._run(max_results=3)
-        
-        self.assertIn('news', result)
-        self.assertIn('total_results', result)
-        self.assertEqual(len(result['news']), 3)
-    
-    def test_news_structure(self):
-        """Testa estrutura das notícias retornadas."""
+
+    @patch("tools.news_tool.urlopen")
+    def test_search_news_from_feed(self, mock_urlopen: Mock):
+        """Testa busca de notícias com feed real simulando resposta RSS."""
+
+        mock_response = Mock()
+        mock_response.read.return_value = self.SAMPLE_FEED.encode('utf-8')
+        mock_urlopen.return_value.__enter__.return_value = mock_response
+
+        result = self.tool._run(max_results=2)
+
+        self.assertFalse(result['fallback'])
+        self.assertEqual(result['total_results'], 2)
+        self.assertEqual(len(result['news']), 2)
+        self.assertEqual(result['news'][0]['source'], 'example.com')
+
+    @patch("tools.news_tool.urlopen", side_effect=Exception("timeout"))
+    def test_fallback_when_feed_fails(self, mock_urlopen: Mock):
+        """Garante que fallback é aplicado quando a requisição falha."""
+
+        result = self.tool._run(max_results=2)
+
+        self.assertTrue(result['fallback'])
+        self.assertEqual(result['total_results'], 2)
+        self.assertEqual(len(result['news']), 2)
+        self.assertEqual(result['news'][0]['source'], 'Simulação SRAG')
+
+    @patch("tools.news_tool.urlopen")
+    def test_news_structure(self, mock_urlopen: Mock):
+        """Testa estrutura das notícias retornadas a partir do feed."""
+
+        mock_response = Mock()
+        mock_response.read.return_value = self.SAMPLE_FEED.encode('utf-8')
+        mock_urlopen.return_value.__enter__.return_value = mock_response
+
         result = self.tool._run(max_results=1)
-        
+
         news_item = result['news'][0]
         self.assertIn('title', news_item)
         self.assertIn('summary', news_item)
@@ -116,44 +226,58 @@ class TestNewsTool(unittest.TestCase):
 
 class TestChartTool(unittest.TestCase):
     """Testes para a ferramenta de geração de gráficos."""
-    
+
     def setUp(self):
         """Configuração antes de cada teste."""
         self.tool = create_chart_tool()
-    
+        self.tmp_dir = tempfile.TemporaryDirectory()
+
+    def _assert_svg_created(self, result: dict):
+        self.assertTrue(result['success'])
+        self.assertIn('filename', result)
+        self.assertIn('path', result)
+
+        filename = Path(self.tmp_dir.name) / result['filename']
+        self.assertTrue(filename.exists(), "Arquivo de gráfico não foi criado")
+        self.assertEqual(filename.suffix, '.svg', "Gráfico deve ser salvo como SVG")
+        self.assertEqual(Path(result['path']).resolve(), filename.resolve())
+
     def test_generate_daily_chart(self):
         """Testa geração de gráfico diário."""
         import json
-        
+
         data = [
             {"date": "2024-12-01", "cases": 100},
             {"date": "2024-12-02", "cases": 150}
         ]
-        
+
         result = self.tool._run(
             chart_type="daily",
-            data=json.dumps(data)
+            data=json.dumps(data),
+            output_path=self.tmp_dir.name
         )
-        
-        self.assertTrue(result['success'])
-        self.assertIn('filename', result)
-    
+
+        self._assert_svg_created(result)
+
     def test_generate_monthly_chart(self):
         """Testa geração de gráfico mensal."""
         import json
-        
+
         data = [
             {"month": "2024-10", "cases": 1000},
             {"month": "2024-11", "cases": 1200}
         ]
-        
+
         result = self.tool._run(
             chart_type="monthly",
-            data=json.dumps(data)
+            data=json.dumps(data),
+            output_path=self.tmp_dir.name
         )
-        
-        self.assertTrue(result['success'])
-        self.assertIn('filename', result)
+
+        self._assert_svg_created(result)
+
+    def tearDown(self):
+        self.tmp_dir.cleanup()
 
 
 class TestInputValidator(unittest.TestCase):
