@@ -262,5 +262,3 @@ class SRAGDatabase:
             'taxa_vacinacao': self.get_vaccination_rate(),
             'total_casos': self.get_total_cases()
         }
-"},
-"message":"fix(database): make DB date parsing robust and handle empty tables"}
