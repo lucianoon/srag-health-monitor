@@ -91,7 +91,7 @@ class InputValidator:
             Query sanitizada
         """
         # Remover caracteres especiais perigosos
-        sanitized = re.sub(r'[<>\"\'%;()&+]', '', query)
+        sanitized = re.sub(r"[<>\"'%;()&+]", '', query)
         
         # Limitar tamanho
         sanitized = sanitized[:200]

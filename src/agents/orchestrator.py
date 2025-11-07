@@ -21,6 +21,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from tools.database_tool import create_database_tool
 from tools.news_tool import create_news_tool
 from tools.chart_tool import create_chart_tool
+from config import REPORTS_DIR
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -246,7 +247,7 @@ Com base nos dados mais recentes do DATASUS, foram registrados **{metrics.get('t
             report = self.generate_report(metrics, news, charts)
             
             # 6. Salvar relatório
-            report_path = f"/home/ubuntu/srag-health-monitor/outputs/reports/relatorio_{self.execution_id}.md"
+            report_path = REPORTS_DIR / f"relatorio_{self.execution_id}.md"
             with open(report_path, 'w', encoding='utf-8') as f:
                 f.write(report)
             

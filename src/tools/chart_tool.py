@@ -4,6 +4,9 @@ Ferramenta de geração de gráficos para o agente de IA.
 Esta ferramenta permite que o agente gere gráficos de visualização de dados.
 """
 
+import matplotlib
+matplotlib.use('Agg')  # Backend para ambientes headless
+
 from langchain.tools import BaseTool
 from typing import Dict, Any, List
 from pydantic import BaseModel, Field
@@ -12,6 +15,11 @@ import matplotlib.dates as mdates
 from datetime import datetime
 import os
 import logging
+import sys
+
+# Adicionar path do projeto para importar config
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from config import REPORTS_DIR
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -26,8 +34,8 @@ class ChartGenerationInput(BaseModel):
         description="Dados em formato JSON string para o gráfico"
     )
     output_path: str = Field(
-        default="/home/ubuntu/srag-health-monitor/outputs/reports/",
-        description="Caminho para salvar o gráfico"
+        default="",
+        description="Caminho para salvar o gráfico (usa REPORTS_DIR se vazio)"
     )
 
 
@@ -71,7 +79,9 @@ class ChartGenerationTool(BaseTool):
         plt.grid(True, alpha=0.3, linestyle='--')
         plt.tight_layout()
         
-        filename = os.path.join(output_path, 'casos_diarios.png')
+        # Incluir timestamp no nome do arquivo para evitar sobrescrita
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = os.path.join(output_path, f'casos_diarios_{timestamp}.png')
         plt.savefig(filename, dpi=300, bbox_inches='tight')
         plt.close()
         
@@ -103,7 +113,9 @@ class ChartGenerationTool(BaseTool):
         plt.grid(True, alpha=0.3, linestyle='--', axis='y')
         plt.tight_layout()
         
-        filename = os.path.join(output_path, 'casos_mensais.png')
+        # Incluir timestamp no nome do arquivo para evitar sobrescrita
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = os.path.join(output_path, f'casos_mensais_{timestamp}.png')
         plt.savefig(filename, dpi=300, bbox_inches='tight')
         plt.close()
         
@@ -111,14 +123,14 @@ class ChartGenerationTool(BaseTool):
         return filename
     
     def _run(self, chart_type: str, data: str, 
-             output_path: str = "/home/ubuntu/srag-health-monitor/outputs/reports/") -> Dict[str, Any]:
+             output_path: str = "") -> Dict[str, Any]:
         """
         Executa a geração de gráfico.
         
         Args:
             chart_type: Tipo de gráfico
             data: Dados em formato JSON string
-            output_path: Caminho para salvar
+            output_path: Caminho para salvar (usa REPORTS_DIR se vazio)
             
         Returns:
             Dicionário com informações do gráfico gerado
@@ -130,6 +142,10 @@ class ChartGenerationTool(BaseTool):
         try:
             # Converter JSON string para objeto
             data_obj = json.loads(data) if isinstance(data, str) else data
+            
+            # Usar REPORTS_DIR se output_path não fornecido
+            if not output_path:
+                output_path = str(REPORTS_DIR)
             
             # Criar diretório se não existir
             os.makedirs(output_path, exist_ok=True)

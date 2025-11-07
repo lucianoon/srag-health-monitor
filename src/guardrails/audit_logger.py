@@ -11,24 +11,34 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 from pathlib import Path
 import uuid
+import sys
+import os
+
+# Adicionar path do projeto para importar config
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+from config import LOGS_DIR
 
 
 class AuditLogger:
     """Logger de auditoria para rastreamento de operações."""
     
-    def __init__(self, log_dir: str = "/home/ubuntu/srag-health-monitor/outputs/logs"):
+    def __init__(self, log_dir: Optional[str] = None):
         """
         Inicializa o audit logger.
         
         Args:
-            log_dir: Diretório para salvar logs
+            log_dir: Diretório para salvar logs (usa config.LOGS_DIR se não fornecido)
         """
-        self.log_dir = Path(log_dir)
+        self.log_dir = Path(log_dir) if log_dir else LOGS_DIR
         self.log_dir.mkdir(parents=True, exist_ok=True)
         
         # Configurar logger
         self.logger = logging.getLogger("audit")
         self.logger.setLevel(logging.INFO)
+        
+        # Idempotência: remover handlers existentes para evitar duplicatas
+        if self.logger.handlers:
+            self.logger.handlers.clear()
         
         # Handler para arquivo JSON
         log_file = self.log_dir / f"audit_{datetime.now().strftime('%Y%m%d')}.jsonl"
