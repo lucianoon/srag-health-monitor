@@ -15,39 +15,39 @@ import uuid
 
 class AuditLogger:
     """Logger de auditoria para rastreamento de operações."""
-    
+
     def __init__(self, log_dir: str = "/home/ubuntu/srag-health-monitor/outputs/logs"):
         """
         Inicializa o audit logger.
-        
+
         Args:
             log_dir: Diretório para salvar logs
         """
         self.log_dir = Path(log_dir)
         self.log_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Configurar logger
         self.logger = logging.getLogger("audit")
         self.logger.setLevel(logging.INFO)
-        
+
         # Handler para arquivo JSON
         log_file = self.log_dir / f"audit_{datetime.now().strftime('%Y%m%d')}.jsonl"
         handler = logging.FileHandler(log_file)
         handler.setFormatter(logging.Formatter('%(message)s'))
         self.logger.addHandler(handler)
-        
+
         # Handler para console
         console_handler = logging.StreamHandler()
         console_handler.setFormatter(
             logging.Formatter('%(asctime)s - AUDIT - %(message)s')
         )
         self.logger.addHandler(console_handler)
-    
-    def log_event(self, event_type: str, data: Dict[str, Any], 
+
+    def log_event(self, event_type: str, data: Dict[str, Any],
                   execution_id: Optional[str] = None):
         """
         Registra um evento de auditoria.
-        
+
         Args:
             event_type: Tipo do evento
             data: Dados do evento
@@ -60,14 +60,14 @@ class AuditLogger:
             "execution_id": execution_id,
             "data": data
         }
-        
+
         self.logger.info(json.dumps(event, ensure_ascii=False))
-    
-    def log_agent_decision(self, decision: str, reasoning: str, 
-                          execution_id: str, metadata: Optional[Dict] = None):
+
+    def log_agent_decision(self, decision: str, reasoning: str,
+                           execution_id: str, metadata: Optional[Dict] = None):
         """
         Registra uma decisão do agente.
-        
+
         Args:
             decision: Decisão tomada
             reasoning: Raciocínio da decisão
@@ -79,14 +79,14 @@ class AuditLogger:
             "reasoning": reasoning,
             "metadata": metadata or {}
         }
-        
+
         self.log_event("agent_decision", data, execution_id)
-    
+
     def log_tool_call(self, tool_name: str, inputs: Dict, outputs: Dict,
-                     execution_id: str, duration_ms: float):
+                      execution_id: str, duration_ms: float):
         """
         Registra uma chamada de ferramenta.
-        
+
         Args:
             tool_name: Nome da ferramenta
             inputs: Parâmetros de entrada
@@ -100,14 +100,14 @@ class AuditLogger:
             "outputs": outputs,
             "duration_ms": duration_ms
         }
-        
+
         self.log_event("tool_call", data, execution_id)
-    
-    def log_validation(self, validation_type: str, valid: bool, 
-                      message: str, execution_id: str):
+
+    def log_validation(self, validation_type: str, valid: bool,
+                       message: str, execution_id: str):
         """
         Registra uma validação.
-        
+
         Args:
             validation_type: Tipo de validação
             valid: Se passou na validação
@@ -119,14 +119,14 @@ class AuditLogger:
             "valid": valid,
             "message": message
         }
-        
+
         self.log_event("validation", data, execution_id)
-    
-    def log_error(self, error_type: str, error_message: str, 
-                 execution_id: str, stack_trace: Optional[str] = None):
+
+    def log_error(self, error_type: str, error_message: str,
+                  execution_id: str, stack_trace: Optional[str] = None):
         """
         Registra um erro.
-        
+
         Args:
             error_type: Tipo do erro
             error_message: Mensagem de erro
@@ -138,15 +138,15 @@ class AuditLogger:
             "error_message": error_message,
             "stack_trace": stack_trace
         }
-        
+
         self.log_event("error", data, execution_id)
-    
+
     def log_report_generation(self, execution_id: str, metrics: Dict,
-                             news_count: int, charts_generated: int,
-                             report_path: str, duration_ms: float):
+                              news_count: int, charts_generated: int,
+                              report_path: str, duration_ms: float):
         """
         Registra a geração de um relatório.
-        
+
         Args:
             execution_id: ID da execução
             metrics: Métricas utilizadas
@@ -162,24 +162,24 @@ class AuditLogger:
             "report_path": report_path,
             "duration_ms": duration_ms
         }
-        
+
         self.log_event("report_generation", data, execution_id)
 
 
 class ExecutionTracker:
     """Rastreador de execução para métricas de performance."""
-    
+
     def __init__(self):
         """Inicializa o tracker."""
         self.executions = {}
-    
+
     def start_execution(self, execution_id: str) -> Dict[str, Any]:
         """
         Inicia o rastreamento de uma execução.
-        
+
         Args:
             execution_id: ID da execução
-            
+
         Returns:
             Dicionário com informações da execução
         """
@@ -190,14 +190,14 @@ class ExecutionTracker:
             "validations": [],
             "errors": []
         }
-        
+
         self.executions[execution_id] = execution
         return execution
-    
+
     def add_tool_call(self, execution_id: str, tool_name: str, duration_ms: float):
         """
         Adiciona uma chamada de ferramenta ao rastreamento.
-        
+
         Args:
             execution_id: ID da execução
             tool_name: Nome da ferramenta
@@ -209,11 +209,11 @@ class ExecutionTracker:
                 "duration_ms": duration_ms,
                 "timestamp": datetime.now().isoformat()
             })
-    
+
     def add_validation(self, execution_id: str, validation_type: str, valid: bool):
         """
         Adiciona uma validação ao rastreamento.
-        
+
         Args:
             execution_id: ID da execução
             validation_type: Tipo de validação
@@ -225,11 +225,11 @@ class ExecutionTracker:
                 "valid": valid,
                 "timestamp": datetime.now().isoformat()
             })
-    
+
     def add_error(self, execution_id: str, error_type: str):
         """
         Adiciona um erro ao rastreamento.
-        
+
         Args:
             execution_id: ID da execução
             error_type: Tipo do erro
@@ -239,26 +239,26 @@ class ExecutionTracker:
                 "type": error_type,
                 "timestamp": datetime.now().isoformat()
             })
-    
+
     def end_execution(self, execution_id: str) -> Dict[str, Any]:
         """
         Finaliza o rastreamento de uma execução.
-        
+
         Args:
             execution_id: ID da execução
-            
+
         Returns:
             Sumário da execução
         """
         if execution_id not in self.executions:
             return {}
-        
+
         execution = self.executions[execution_id]
         execution["end_time"] = datetime.now()
         execution["duration_ms"] = (
             execution["end_time"] - execution["start_time"]
         ).total_seconds() * 1000
-        
+
         summary = {
             "execution_id": execution_id,
             "duration_ms": execution["duration_ms"],
@@ -268,7 +268,7 @@ class ExecutionTracker:
             "total_errors": len(execution["errors"]),
             "success": len(execution["errors"]) == 0
         }
-        
+
         return summary
 
 
@@ -280,12 +280,12 @@ execution_tracker = ExecutionTracker()
 if __name__ == "__main__":
     # Teste do sistema de auditoria
     print("\n=== Teste: Sistema de Auditoria ===")
-    
+
     execution_id = "test_20251106_001"
-    
+
     # Iniciar execução
     execution_tracker.start_execution(execution_id)
-    
+
     # Simular eventos
     audit_logger.log_agent_decision(
         decision="Gerar relatório de SRAG",
@@ -293,7 +293,7 @@ if __name__ == "__main__":
         execution_id=execution_id,
         metadata={"user": "system"}
     )
-    
+
     audit_logger.log_tool_call(
         tool_name="database_query",
         inputs={"query_type": "metrics"},
@@ -301,20 +301,20 @@ if __name__ == "__main__":
         execution_id=execution_id,
         duration_ms=150.5
     )
-    
+
     execution_tracker.add_tool_call(execution_id, "database_query", 150.5)
-    
+
     audit_logger.log_validation(
         validation_type="metrics_validation",
         valid=True,
         message="Métricas dentro do range esperado",
         execution_id=execution_id
     )
-    
+
     execution_tracker.add_validation(execution_id, "metrics_validation", True)
-    
+
     # Finalizar execução
     summary = execution_tracker.end_execution(execution_id)
-    
+
     print("\n=== Sumário da Execução ===")
     print(json.dumps(summary, indent=2, ensure_ascii=False))
