@@ -1,4 +1,4 @@
-# SRAG Health Monitor 🏥
+SRAG Health Monitor 🏥
 
 Sistema de Monitoramento Inteligente de Surtos de SRAG (Síndrome Respiratória Aguda Grave) utilizando Inteligência Artificial Generativa para análise de dados e geração automatizada de relatórios epidemiológicos.
 
@@ -7,11 +7,11 @@ Sistema de Monitoramento Inteligente de Surtos de SRAG (Síndrome Respiratória 
 [![OpenAI](https://img.shields.io/badge/OpenAI-GPT--4.1-orange.svg)](https://openai.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-## 📋 Sobre o Projeto
+📋 Sobre o Projeto
 
 Este projeto foi desenvolvido como parte da certificação de **Artificial Intelligence Engineer** pela Indicium HealthCare Inc. O objetivo é criar uma solução baseada em IA Generativa que auxilie profissionais da área da saúde a ter um entendimento em tempo real sobre a severidade e o avanço de surtos de doenças respiratórias.
 
-### Características Principais
+Características Principais
 
 - **Agente Orquestrador Inteligente**: Utiliza LangGraph e GPT-4.1-mini para coordenar análises complexas
 - **Consulta Automatizada de Dados**: Acessa banco de dados com ~265 mil registros do DATASUS
@@ -21,7 +21,7 @@ Este projeto foi desenvolvido como parte da certificação de **Artificial Intel
 - **Governança e Auditoria**: Sistema completo de logging e rastreabilidade
 - **Guardrails de Segurança**: Validações em múltiplas camadas e proteção de dados (LGPD)
 
-## 🏗️ Arquitetura
+🏗️ Arquitetura
 
 ![Arquitetura do Sistema](docs/architecture_diagram.png)
 
@@ -34,14 +34,14 @@ A solução é composta por 6 camadas principais:
 5. **Camada de Processamento**: ETL de dados do DATASUS
 6. **Camada de Saída**: Relatórios e logs de auditoria
 
-### Diagrama Conceitual
+Diagrama Conceitual
 
 O diagrama conceitual completo está disponível em:
 - **PNG**: [docs/architecture_diagram.png](docs/architecture_diagram.png)
 - **PDF**: [docs/architecture_diagram.pdf](docs/architecture_diagram.pdf)
 - **Mermaid**: [docs/architecture_diagram.mmd](docs/architecture_diagram.mmd)
 
-## 📊 Métricas Geradas
+📊 Métricas Geradas
 
 O sistema calcula e analisa automaticamente:
 
@@ -54,15 +54,15 @@ Além disso, gera:
 - Gráfico de casos diários (últimos 30 dias)
 - Gráfico de casos mensais (últimos 12 meses)
 
-## 🚀 Instalação e Configuração
+Instalação e Configuração
 
-### Pré-requisitos
+Pré-requisitos
 
 - Python 3.11+
 - pip3
 - Variável de ambiente `OPENAI_API_KEY` configurada
 
-### Instalação
+Instalação
 
 ```bash
 # Clone o repositório
@@ -76,7 +76,7 @@ pip3 install -r requirements.txt
 export OPENAI_API_KEY="sua-chave-api"
 ```
 
-### Estrutura do Projeto
+Estrutura do Projeto
 
 ```
 srag-health-monitor/
@@ -108,21 +108,21 @@ srag-health-monitor/
 └── README.md
 ```
 
-## 💻 Uso
+💻 Uso
 
-### 1. Processar Dados do DATASUS
+1. Processar Dados do DATASUS
 
 ```bash
 python3.11 src/utils/data_processor.py
 ```
 
-### 2. Criar e Popular Banco de Dados
+2. Criar e Popular Banco de Dados
 
 ```bash
 python3.11 src/database/db_manager.py
 ```
 
-### 3. Gerar Relatório
+3. Gerar Relatório
 
 ```bash
 python3.11 src/agents/orchestrator.py
@@ -130,7 +130,7 @@ python3.11 src/agents/orchestrator.py
 
 O relatório será gerado em `outputs/reports/relatorio_YYYYMMDD_HHMMSS.md`
 
-### Exemplo de Uso Programático
+Exemplo de Uso Programático
 
 ```python
 from src.agents.orchestrator import SRAGReportOrchestrator
@@ -144,9 +144,9 @@ report = orchestrator.run()
 print(report)
 ```
 
-## 🔒 Governança e Transparência
+🔒 Governança e Transparência
 
-### Sistema de Auditoria
+Sistema de Auditoria
 
 Todas as decisões do agente são registradas em logs estruturados (JSONL):
 
@@ -164,7 +164,7 @@ Todas as decisões do agente são registradas em logs estruturados (JSONL):
 }
 ```
 
-### Guardrails Implementados
+Guardrails Implementados
 
 1. **Validação de Entrada**
    - Sanitização de parâmetros
@@ -181,9 +181,9 @@ Todas as decisões do agente são registradas em logs estruturados (JSONL):
    - Anonimização de dados sensíveis
    - Dados já anonimizados na fonte (DATASUS)
 
-## 📈 Resultados
+📈 Resultados
 
-### Métricas Atuais (2024)
+Métricas Atuais (2024)
 
 - **Total de Casos**: 265.087
 - **Taxa de Mortalidade**: 7,67%
@@ -191,7 +191,7 @@ Todas as decisões do agente são registradas em logs estruturados (JSONL):
 - **Taxa de Vacinação**: 52,90%
 - **Tendência**: -3,67% (redução nos últimos 30 dias)
 
-### Exemplo de Relatório Gerado
+Exemplo de Relatório Gerado
 
 Os relatórios incluem:
 - Métricas principais com análise contextual
@@ -199,7 +199,7 @@ Os relatórios incluem:
 - Gráficos de visualização temporal
 - Conclusões e recomendações baseadas em dados
 
-## 🛠️ Tecnologias Utilizadas
+🛠️ Tecnologias Utilizadas
 
 - **Python 3.11**: Linguagem principal
 - **LangChain/LangGraph**: Framework de agentes de IA
@@ -209,39 +209,39 @@ Os relatórios incluem:
 - **Matplotlib**: Visualizações
 - **BeautifulSoup**: Web scraping (notícias)
 
-## 📝 Critérios de Avaliação Atendidos
+📝 Critérios de Avaliação Atendidos
 
-### ✅ Arquitetura
+✅ Arquitetura
 - Arquitetura modular e escalável
 - Separação clara de responsabilidades
 - Uso de design patterns (Factory, Strategy)
 
-### ✅ Governança e Transparência
+✅ Governança e Transparência
 - Sistema completo de auditoria
 - Logging estruturado em JSONL
 - Rastreabilidade de todas as decisões
 - Métricas de performance
 
-### ✅ Guardrails
+✅ Guardrails
 - Validação em múltiplas camadas
 - Rate limiting
 - Sanitização de inputs
 - Validação de outputs
 
-### ✅ Tratamento de Dados Sensíveis
+✅ Tratamento de Dados Sensíveis
 - Conformidade com LGPD
 - Detecção e anonimização de PII
 - Dados já anonimizados na fonte
 - Sem armazenamento de dados pessoais
 
-### ✅ Clean Code
+✅ Clean Code
 - PEP 8 compliance
 - Type hints em todas as funções
 - Docstrings completas
 - Código modular e testável
 - Logging apropriado
 
-## 📚 Fonte de Dados
+📚 Fonte de Dados
 
 Os dados utilizados são provenientes do **OpenDATASUS**, especificamente do sistema **SIVEP-Gripe** (Sistema de Informação da Vigilância Epidemiológica da Gripe):
 
@@ -251,7 +251,7 @@ Os dados utilizados são provenientes do **OpenDATASUS**, especificamente do sis
 - **Granularidade**: Municipal, diária
 - **Licença**: Creative Commons Atribuição
 
-## 🔮 Melhorias Futuras
+🔮 Melhorias Futuras
 
 - [ ] Integração com APIs reais de notícias (Google News API, NewsAPI)
 - [ ] Dashboard interativo com Streamlit/Dash
@@ -261,20 +261,12 @@ Os dados utilizados são provenientes do **OpenDATASUS**, especificamente do sis
 - [ ] API REST para integração externa
 - [ ] Suporte a múltiplas doenças respiratórias
 
-## 👨‍💻 Autor
+👨‍💻 Autor
 
 Desenvolvido como projeto de certificação em **Artificial Intelligence Engineer**.
 
-## 📄 Licença
+📄 Licença
 
 Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
-
-## 🙏 Agradecimentos
-
-- **Ministério da Saúde** - Pela disponibilização dos dados do DATASUS
-- **Indicium HealthCare Inc.** - Pela oportunidade de certificação
-- **Comunidade Open Source** - Pelas ferramentas e bibliotecas utilizadas
-
----
 
 **Nota**: Este é um projeto de demonstração para fins educacionais e de certificação. Para uso em produção, recomenda-se validação adicional por profissionais de saúde e epidemiologistas.
