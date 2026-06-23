@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from datetime import datetime
+from pathlib import Path
 import os
 import logging
 
@@ -26,7 +27,7 @@ class ChartGenerationInput(BaseModel):
         description="Dados em formato JSON string para o gráfico"
     )
     output_path: str = Field(
-        default="/home/ubuntu/srag-health-monitor/outputs/reports/",
+        default=str(Path(os.getenv("SRAG_OUTPUT_DIR", Path.cwd() / "outputs" / "reports"))),
         description="Caminho para salvar o gráfico"
     )
 
@@ -111,7 +112,7 @@ class ChartGenerationTool(BaseTool):
         return filename
 
     def _run(self, chart_type: str, data: str,
-             output_path: str = "/home/ubuntu/srag-health-monitor/outputs/reports/") -> Dict[str, Any]:
+             output_path: str | None = None) -> Dict[str, Any]:
         """
         Executa a geração de gráfico.
 
@@ -130,6 +131,9 @@ class ChartGenerationTool(BaseTool):
         try:
             # Converter JSON string para objeto
             data_obj = json.loads(data) if isinstance(data, str) else data
+
+            if output_path is None:
+                output_path = str(Path(os.getenv("SRAG_OUTPUT_DIR", Path.cwd() / "outputs" / "reports")))
 
             # Criar diretório se não existir
             os.makedirs(output_path, exist_ok=True)

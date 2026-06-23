@@ -8,6 +8,7 @@ from database.db_manager import SRAGDatabase
 from langchain.tools import BaseTool
 from typing import Dict, Any, Optional
 from pydantic import BaseModel, Field
+from pathlib import Path
 import sys
 import os
 
@@ -43,7 +44,12 @@ class DatabaseQueryTool(BaseTool):
         "Use 'monthly_cases' para obter casos mensais dos últimos N meses."
     )
     args_schema: type[BaseModel] = DatabaseQueryInput
-    db_path: str = "/home/ubuntu/srag-health-monitor/data/srag.db"
+    db_path: str = str(
+        Path(os.getenv(
+            "SRAG_DB_PATH",
+            Path(__file__).resolve().parents[2] / "data" / "srag.db"
+        ))
+    )
 
     def _run(self, query_type: str, days: int = 30, months: int = 12) -> Dict[str, Any]:
         """
