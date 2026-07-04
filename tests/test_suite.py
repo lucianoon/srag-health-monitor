@@ -18,7 +18,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "src"))
 from database.db_manager import SRAGDatabase
 from agents.data_ingestion_agent import DataSnapshot, SUSDataIngestionAgent
 from agents.epidemiology_analysis_agent import EpidemiologyAnalysisAgent
-from agents.report_writer_agent import ReportWriterAgent
+from agents.report_writer_agent import ReportNarrative, ReportWriterAgent
 from config import AppConfig
 from guardrails.validators import (
     DataPrivacyGuard,
@@ -386,6 +386,93 @@ class TestMultiAgentPipeline(TempSRAGDatabaseMixin, unittest.TestCase):
 
         self.assertIn("Fonte e Rastreabilidade", report)
         self.assertIn("sqlite_cache", report)
+        self.assertIn("Narrativa: deterministica", report)
+
+    def _build_analysis(self):
+        snapshot = DataSnapshot(
+            metrics={
+                "taxa_aumento_casos": 0.0,
+                "taxa_mortalidade": 7.0,
+                "taxa_ocupacao_uti": 25.0,
+                "taxa_vacinacao": 65.0,
+                "total_casos": 12,
+            },
+            daily_cases={"daily_cases": []},
+            monthly_cases={"monthly_cases": []},
+            news={"news": []},
+            source={"provider": "DATASUS/SIVEP-Gripe"},
+        )
+        return EpidemiologyAnalysisAgent().analyze(snapshot)
+
+    def test_report_writer_uses_llm_narrative_when_available(self):
+        narrative = ReportNarrative(
+            cenario_atual="Cenário epidemiológico estável segundo análise do modelo.",
+            conclusoes_e_recomendacoes="- Manter vigilância ativa nas regiões monitoradas.",
+        )
+
+        class FakeLLM:
+            def with_structured_output(self, schema):
+                return self
+
+            def invoke(self, messages):
+                return narrative
+
+        writer = ReportWriterAgent(self.config, llm=FakeLLM())
+        report = writer.write(
+            analysis=self._build_analysis(),
+            charts={},
+            execution_id="exec-llm",
+        )
+
+        self.assertIn("Cenário epidemiológico estável segundo análise do modelo.", report)
+        self.assertIn("- Manter vigilância ativa nas regiões monitoradas.", report)
+        self.assertIn("Narrativa: llm (gpt-4.1-mini)", report)
+        valid, message = OutputValidator.validate_report_content(report)
+        self.assertTrue(valid, message)
+
+    def test_report_writer_falls_back_when_llm_fails(self):
+        class FailingLLM:
+            def with_structured_output(self, schema):
+                raise RuntimeError("LLM indisponível")
+
+        writer = ReportWriterAgent(self.config, llm=FailingLLM())
+        report = writer.write(
+            analysis=self._build_analysis(),
+            charts={},
+            execution_id="exec-fallback",
+        )
+
+        self.assertIn("Narrativa: deterministica", report)
+        self.assertIn("A taxa de mortalidade está", report)
+        valid, message = OutputValidator.validate_report_content(report)
+        self.assertTrue(valid, message)
+
+    def test_report_writer_falls_back_when_llm_returns_empty_narrative(self):
+        empty_narrative = ReportNarrative(
+            cenario_atual="   ",
+            conclusoes_e_recomendacoes="",
+        )
+
+        class EmptyLLM:
+            def with_structured_output(self, schema):
+                return self
+
+            def invoke(self, messages):
+                return empty_narrative
+
+        writer = ReportWriterAgent(self.config, llm=EmptyLLM())
+        report = writer.write(
+            analysis=self._build_analysis(),
+            charts={},
+            execution_id="exec-empty",
+        )
+
+        self.assertIn("Narrativa: deterministica", report)
+        self.assertIn("A taxa de mortalidade está", report)
+
+    def test_report_writer_without_api_key_has_no_llm(self):
+        writer = ReportWriterAgent(self.config)
+        self.assertIsNone(writer.llm)
 
 
 class TestDataIngestionService(unittest.TestCase):

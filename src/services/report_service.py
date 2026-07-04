@@ -52,7 +52,10 @@ class GenerateReportService:
             decision="Iniciar geração de relatório",
             reasoning="Execução solicitada pela camada de aplicação",
             execution_id=execution_id,
-            metadata={"model": self.config.model_name}
+            metadata={
+                "model": self.config.model_name,
+                "llm_enabled": bool(self.config.openai_api_key),
+            }
         )
 
         started_at = perf_counter()

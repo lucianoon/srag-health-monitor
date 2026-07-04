@@ -33,6 +33,7 @@ class SRAGMultiAgentReportOrchestrator:
         self.last_charts = {}
         self.last_source = {}
         self.last_analysis = None
+        self.last_narrative_mode = "deterministica"
 
     def run(self) -> str:
         """Executa o pipeline multiagente completo."""
@@ -59,6 +60,7 @@ class SRAGMultiAgentReportOrchestrator:
             charts=charts,
             execution_id=self.execution_id,
         )
+        self.last_narrative_mode = self.writer_agent.narrative_mode
         self.report_path.write_text(report, encoding="utf-8")
         logger.info("Relatório salvo em: %s", self.report_path)
 

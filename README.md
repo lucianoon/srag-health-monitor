@@ -65,8 +65,17 @@ Makefile
 - Docker/Compose opcional para execução containerizada
 - `data/srag.db` para gerar relatórios reais
 
-`OPENAI_API_KEY` é opcional no estado atual: sem a chave, o relatório segue no
-modo determinístico.
+`OPENAI_API_KEY` é opcional: com a chave configurada, as seções narrativas do
+relatório (análise contextual e conclusões/recomendações) são escritas pelo
+LLM (`SRAG_MODEL`, default `gpt-4.1-mini`) a partir dos achados calculados
+deterministicamente; sem a chave — ou em caso de falha na chamada — o relatório
+cai no modo determinístico baseado em regras. O modo usado fica registrado na
+seção "Fonte e Rastreabilidade" de cada relatório.
+
+As métricas, achados e nível de risco são sempre calculados por código
+determinístico; o LLM escreve apenas a narrativa, com instruções de não
+inventar números e sem acesso a dados de pacientes. O texto gerado passa pelos
+mesmos guardrails de validação de conteúdo e anonimização de PII.
 
 ## Setup Local
 
