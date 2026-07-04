@@ -21,6 +21,7 @@ wheels/
 *.egg
 
 # Virtual Environment
+.venv/
 venv/
 ENV/
 env/
@@ -39,6 +40,7 @@ env/
 # Data Files
 data/raw/*.csv
 data/processed/*.csv
+data/jobs.db
 *.db
 *.sqlite
 

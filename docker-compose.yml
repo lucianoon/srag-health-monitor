@@ -1,0 +1,45 @@
+services:
+  api:
+    build: .
+    command: uvicorn api.app:app --host 0.0.0.0 --port 8000
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      SRAG_DATA_DIR: /app/data
+      SRAG_DB_PATH: /app/data/srag.db
+      SRAG_JOBS_DB_PATH: /app/data/jobs.db
+      SRAG_OUTPUT_DIR: /app/outputs/reports
+      SRAG_LOG_DIR: /app/outputs/logs
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./outputs:/app/outputs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  worker:
+    build: .
+    command: python worker.py --poll-interval 2
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      SRAG_DATA_DIR: /app/data
+      SRAG_DB_PATH: /app/data/srag.db
+      SRAG_JOBS_DB_PATH: /app/data/jobs.db
+      SRAG_OUTPUT_DIR: /app/outputs/reports
+      SRAG_LOG_DIR: /app/outputs/logs
+    volumes:
+      - ./data:/app/data
+      - ./outputs:/app/outputs
+    depends_on:
+      api:
+        condition: service_started
+    restart: unless-stopped

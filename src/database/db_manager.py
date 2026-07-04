@@ -12,6 +12,7 @@ import pandas as pd
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
 import logging
+from pathlib import Path
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -33,6 +34,7 @@ class SRAGDatabase:
     def connect(self):
         """Estabelece conexão com o banco de dados."""
         logger.info(f"Conectando ao banco de dados: {self.db_path}")
+        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(self.db_path)
         return self.conn
 
@@ -130,6 +132,13 @@ class SRAGDatabase:
 
         logger.info(f"{len(df_db)} registros inseridos no banco de dados")
 
+    def clear_cases(self):
+        """Remove casos existentes para permitir cargas idempotentes."""
+        cursor = self.conn.cursor()
+        cursor.execute("DELETE FROM casos_srag")
+        self.conn.commit()
+        logger.info("Casos SRAG existentes removidos do banco")
+
     def get_total_cases(self) -> int:
         """Retorna o total de casos registrados."""
         cursor = self.conn.cursor()
@@ -151,6 +160,7 @@ class SRAGDatabase:
             FROM casos_srag
         """)
         total, obitos = cursor.fetchone()
+        obitos = obitos or 0
 
         if total == 0:
             return 0.0
@@ -172,6 +182,7 @@ class SRAGDatabase:
             FROM casos_srag
         """)
         total, uti_cases = cursor.fetchone()
+        uti_cases = uti_cases or 0
 
         if total == 0:
             return 0.0
@@ -193,6 +204,7 @@ class SRAGDatabase:
             FROM casos_srag
         """)
         total, vacinados = cursor.fetchone()
+        vacinados = vacinados or 0
 
         if total == 0:
             return 0.0
@@ -214,7 +226,9 @@ class SRAGDatabase:
         # Obter data máxima
         cursor.execute("SELECT MAX(dt_notific) FROM casos_srag")
         max_date_str = cursor.fetchone()[0]
-        max_date = datetime.strptime(max_date_str, '%Y-%m-%d %H:%M:%S')
+        if not max_date_str:
+            return 0.0
+        max_date = self._parse_db_datetime(max_date_str)
 
         # Período atual
         current_start = max_date - timedelta(days=period_days)
@@ -255,7 +269,9 @@ class SRAGDatabase:
         # Obter data máxima
         cursor.execute("SELECT MAX(dt_notific) FROM casos_srag")
         max_date_str = cursor.fetchone()[0]
-        max_date = datetime.strptime(max_date_str, '%Y-%m-%d %H:%M:%S')
+        if not max_date_str:
+            return []
+        max_date = self._parse_db_datetime(max_date_str)
 
         cutoff_date = max_date - timedelta(days=last_n_days)
 
@@ -311,13 +327,21 @@ class SRAGDatabase:
             'total_casos': self.get_total_cases()
         }
 
+    @staticmethod
+    def _parse_db_datetime(value: str) -> datetime:
+        """Converte datas vindas do SQLite/Pandas em datetime."""
+        return pd.to_datetime(value).to_pydatetime()
+
 
 if __name__ == "__main__":
+    from config import AppConfig
+
     # Teste do banco de dados
-    db = SRAGDatabase('/home/ubuntu/srag-health-monitor/data/srag.db')
+    config = AppConfig.from_env()
+    db = SRAGDatabase(str(config.db_path))
     db.connect()
     db.create_tables()
-    db.load_data_from_csv('/home/ubuntu/srag-health-monitor/data/processed/srag_2024_processed.csv')
+    db.load_data_from_csv(str(config.data_dir / "processed" / "srag_2024_processed.csv"))
 
     print("\n=== Métricas do Banco de Dados ===")
     metrics = db.get_all_metrics()

@@ -9,6 +9,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      MPLBACKEND: Agg
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,3 +30,34 @@ jobs:
 
       - name: Run tests
         run: python -m unittest discover -s tests -p "test*.py"
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate Compose config
+        run: docker compose config
+
+      - name: Build image
+        run: docker compose build
+
+      - name: Start API
+        run: docker compose up -d api
+
+      - name: Smoke test API health
+        run: |
+          for i in {1..30}; do
+            if curl -fsS http://localhost:8000/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs api
+          exit 1
+
+      - name: Stop containers
+        if: always()
+        run: docker compose down --volumes

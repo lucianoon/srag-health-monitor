@@ -8,40 +8,52 @@ todas as decisões e operações do agente.
 import json
 import logging
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Union
 from pathlib import Path
 import uuid
+
+from config import AppConfig
 
 
 class AuditLogger:
     """Logger de auditoria para rastreamento de operações."""
 
-    def __init__(self, log_dir: str = "/home/ubuntu/srag-health-monitor/outputs/logs"):
+    def __init__(self, log_dir: Optional[Union[str, Path]] = None):
         """
         Inicializa o audit logger.
 
         Args:
             log_dir: Diretório para salvar logs
         """
-        self.log_dir = Path(log_dir)
+        self.log_dir = Path(log_dir or AppConfig.from_env().logs_dir)
         self.log_dir.mkdir(parents=True, exist_ok=True)
 
         # Configurar logger
         self.logger = logging.getLogger("audit")
         self.logger.setLevel(logging.INFO)
+        self.logger.propagate = False
 
         # Handler para arquivo JSON
         log_file = self.log_dir / f"audit_{datetime.now().strftime('%Y%m%d')}.jsonl"
-        handler = logging.FileHandler(log_file)
-        handler.setFormatter(logging.Formatter('%(message)s'))
-        self.logger.addHandler(handler)
+        if not any(
+            isinstance(existing, logging.FileHandler)
+            and Path(existing.baseFilename) == log_file
+            for existing in self.logger.handlers
+        ):
+            handler = logging.FileHandler(log_file)
+            handler.setFormatter(logging.Formatter('%(message)s'))
+            self.logger.addHandler(handler)
 
         # Handler para console
-        console_handler = logging.StreamHandler()
-        console_handler.setFormatter(
-            logging.Formatter('%(asctime)s - AUDIT - %(message)s')
-        )
-        self.logger.addHandler(console_handler)
+        if not any(
+            type(existing) is logging.StreamHandler
+            for existing in self.logger.handlers
+        ):
+            console_handler = logging.StreamHandler()
+            console_handler.setFormatter(
+                logging.Formatter('%(asctime)s - AUDIT - %(message)s')
+            )
+            self.logger.addHandler(console_handler)
 
     def log_event(self, event_type: str, data: Dict[str, Any],
                   execution_id: Optional[str] = None):
@@ -272,8 +284,13 @@ class ExecutionTracker:
         return summary
 
 
+def create_audit_logger(log_dir: Optional[Union[str, Path]] = None) -> AuditLogger:
+    """Cria logger de auditoria apontando para o diretório configurado."""
+    return AuditLogger(log_dir=log_dir)
+
+
 # Instâncias globais
-audit_logger = AuditLogger()
+audit_logger = create_audit_logger()
 execution_tracker = ExecutionTracker()
 
 

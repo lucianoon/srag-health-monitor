@@ -299,8 +299,12 @@ class SRAGDataProcessor:
 
 
 if __name__ == "__main__":
+    from config import AppConfig
+
+    config = AppConfig.from_env()
+
     # Teste do processador
-    processor = SRAGDataProcessor('/home/ubuntu/srag-health-monitor/data/raw/srag_2024.csv')
+    processor = SRAGDataProcessor(str(config.data_dir / "raw" / "srag_2024.csv"))
     processor.load_data()
     processor.clean_data()
 
@@ -309,5 +313,4 @@ if __name__ == "__main__":
     for key, value in stats.items():
         print(f"{key}: {value}")
 
-    processor.save_processed_data(
-        '/home/ubuntu/srag-health-monitor/data/processed/srag_2024_processed.csv')
+    processor.save_processed_data(str(config.data_dir / "processed" / "srag_2024_processed.csv"))

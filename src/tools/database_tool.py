@@ -5,6 +5,7 @@ Esta ferramenta permite que o agente consulte métricas e dados do banco de SRAG
 """
 
 from database.db_manager import SRAGDatabase
+from guardrails.validators import InputValidator
 from langchain.tools import BaseTool
 from typing import Dict, Any, Optional
 from pydantic import BaseModel, Field
@@ -63,7 +64,30 @@ class DatabaseQueryTool(BaseTool):
         Returns:
             Dicionário com os resultados da consulta
         """
-        db = SRAGDatabase(self.db_path)
+        valid, message = InputValidator.validate_query_type(query_type)
+        if not valid:
+            return {"error": message}
+
+        if query_type == "daily_cases":
+            valid, message = InputValidator.validate_days_parameter(days)
+            if not valid:
+                return {"error": message}
+
+        if query_type == "monthly_cases":
+            valid, message = InputValidator.validate_months_parameter(months)
+            if not valid:
+                return {"error": message}
+
+        db_file = Path(self.db_path)
+        if not db_file.exists():
+            return {
+                "error": (
+                    f"Banco de dados não encontrado em {db_file}. "
+                    "Execute o pipeline de processamento/carga de dados antes de gerar relatórios."
+                )
+            }
+
+        db = SRAGDatabase(str(db_file))
         db.connect()
 
         try:
@@ -102,9 +126,9 @@ class DatabaseQueryTool(BaseTool):
 
 
 # Função auxiliar para criar a ferramenta
-def create_database_tool() -> DatabaseQueryTool:
+def create_database_tool(db_path: Optional[str] = None) -> DatabaseQueryTool:
     """Cria e retorna uma instância da ferramenta de banco de dados."""
-    return DatabaseQueryTool()
+    return DatabaseQueryTool(db_path=db_path) if db_path else DatabaseQueryTool()
 
 
 if __name__ == "__main__":

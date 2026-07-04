@@ -1,0 +1,10 @@
+{
+  "provider": "DATASUS/SIVEP-Gripe",
+  "source_url": "https://s3.sa-east-1.amazonaws.com/ckan.saude.gov.br/SRAG/2024/INFLUD24-26-06-2025.csv",
+  "raw_path": "/Users/lu_on/Documents/Codex/2026-07-04/lucianoon-srag-health-monitor-https-github/work/repo/data/raw/INFLUD24-26-06-2025.csv",
+  "processed_path": "/Users/lu_on/Documents/Codex/2026-07-04/lucianoon-srag-health-monitor-https-github/work/repo/data/processed/srag_processed.csv",
+  "db_path": "/Users/lu_on/Documents/Codex/2026-07-04/lucianoon-srag-health-monitor-https-github/work/repo/data/srag.db",
+  "rows_processed": 19975,
+  "duration_ms": 111524.64316699999,
+  "ingested_at": "2026-07-04T20:02:22.650070"
+}

@@ -6,9 +6,6 @@ Este script coordena todo o fluxo de geração de relatórios,
 incluindo validações, auditoria e tratamento de erros.
 """
 
-from guardrails.audit_logger import audit_logger, execution_tracker
-from guardrails.validators import InputValidator, OutputValidator, DataPrivacyGuard
-from agents.orchestrator import SRAGReportOrchestrator
 import os
 import sys
 from datetime import datetime
@@ -16,6 +13,9 @@ import argparse
 
 # Adicionar src ao path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+
+from config import AppConfig
+from guardrails.audit_logger import create_audit_logger, execution_tracker
 
 
 def main():
@@ -42,107 +42,55 @@ def main():
     print("SRAG Health Monitor - Sistema de Monitoramento Inteligente")
     print("=" * 80)
     print(f"\nData/Hora: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
-    print(f"Modelo LLM: {args.model}")
-    print(f"Diretório de Saída: {args.output_dir}\n")
+    config = AppConfig.from_env(model_name=args.model, output_dir=args.output_dir)
+    config.ensure_runtime_dirs()
 
-    # Verificar variável de ambiente
-    if not os.getenv('OPENAI_API_KEY'):
-        print("❌ ERRO: Variável de ambiente OPENAI_API_KEY não configurada")
-        print("Configure com: export OPENAI_API_KEY='sua-chave-api'")
-        sys.exit(1)
+    print(f"Modelo LLM: {config.model_name}")
+    print(f"Banco de Dados: {config.db_path}")
+    print(f"Diretório de Saída: {config.reports_dir}\n")
 
-    # Criar orquestrador
-    print("🤖 Inicializando orquestrador...")
-    orchestrator = SRAGReportOrchestrator(model_name=args.model)
-    execution_id = orchestrator.execution_id
+    audit_logger = create_audit_logger(config.logs_dir)
 
-    # Iniciar rastreamento
-    execution_tracker.start_execution(execution_id)
+    if not config.openai_api_key:
+        print("⚠️  OPENAI_API_KEY não configurada; o relatório será gerado no modo determinístico.")
+
+    from services.report_service import GenerateReportService
+
+    print("🤖 Inicializando serviço de relatório...")
+    service = GenerateReportService(
+        config=config,
+        audit_logger=audit_logger,
+        execution_tracker=execution_tracker,
+    )
 
     try:
-        # Registrar início
-        audit_logger.log_agent_decision(
-            decision="Iniciar geração de relatório",
-            reasoning="Execução solicitada via script principal",
-            execution_id=execution_id,
-            metadata={"model": args.model}
-        )
-
-        print(f"📋 ID de Execução: {execution_id}\n")
-
         # Executar geração de relatório
         print("⚙️  Gerando relatório...")
-        start_time = datetime.now()
+        result = service.run()
 
-        report = orchestrator.run()
-
-        end_time = datetime.now()
-        duration_ms = (end_time - start_time).total_seconds() * 1000
-
-        # Validar relatório
-        print("\n🔍 Validando relatório...")
-        valid, message = OutputValidator.validate_report_content(report)
-
-        if not valid:
-            print(f"❌ Validação falhou: {message}")
-            audit_logger.log_validation(
-                validation_type="report_content",
-                valid=False,
-                message=message,
-                execution_id=execution_id
-            )
-            sys.exit(1)
-
+        print(f"📋 ID de Execução: {result.execution_id}")
         print("✅ Relatório validado com sucesso")
 
-        # Verificar PII (não deve haver em relatórios agregados)
-        has_pii, pii_types = DataPrivacyGuard.check_for_pii(report)
-        if has_pii:
-            print(f"⚠️  AVISO: PII detectado no relatório: {pii_types}")
-            print("   Anonimizando automaticamente...")
-            report = DataPrivacyGuard.anonymize_text(report)
-
-        # Finalizar rastreamento
-        summary = execution_tracker.end_execution(execution_id)
+        if result.pii_detected:
+            print(f"⚠️  PII detectada e anonimizada: {result.pii_types}")
 
         print("\n" + "=" * 80)
         print("RELATÓRIO GERADO COM SUCESSO")
         print("=" * 80)
-        print(f"\n📄 Arquivo: outputs/reports/relatorio_{execution_id}.md")
-        print(f"⏱️  Duração: {duration_ms:.2f}ms")
-        print(f"🔧 Ferramentas utilizadas: {summary['total_tool_calls']}")
-        print(f"✓  Validações: {summary['total_validations']}")
-
-        # Registrar sucesso
-        audit_logger.log_report_generation(
-            execution_id=execution_id,
-            metrics=orchestrator.collect_metrics(),
-            news_count=5,
-            charts_generated=2,
-            report_path=f"outputs/reports/relatorio_{execution_id}.md",
-            duration_ms=duration_ms
-        )
+        print(f"\n📄 Arquivo: {result.report_path}")
+        print(f"⏱️  Duração: {result.duration_ms:.2f}ms")
+        print(f"🔧 Ferramentas utilizadas: {result.summary['total_tool_calls']}")
+        print(f"✓  Validações: {result.summary['total_validations']}")
 
         print("\n📊 Sumário da Execução:")
-        print(f"   - Sucesso: {summary['success']}")
-        print(f"   - Erros: {summary['total_errors']}")
-        print(f"   - Validações falhadas: {summary['failed_validations']}")
+        print(f"   - Sucesso: {result.summary['success']}")
+        print(f"   - Erros: {result.summary['total_errors']}")
+        print(f"   - Validações falhadas: {result.summary['failed_validations']}")
 
         print("\n✨ Execução concluída com sucesso!")
 
     except Exception as e:
         print(f"\n❌ ERRO durante execução: {e}")
-
-        # Registrar erro
-        audit_logger.log_error(
-            error_type=type(e).__name__,
-            error_message=str(e),
-            execution_id=execution_id,
-            stack_trace=None
-        )
-
-        execution_tracker.add_error(execution_id, type(e).__name__)
-
         sys.exit(1)
 
 

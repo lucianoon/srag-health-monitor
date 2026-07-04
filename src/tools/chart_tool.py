@@ -5,7 +5,7 @@ Esta ferramenta permite que o agente gere gráficos de visualização de dados.
 """
 
 from langchain.tools import BaseTool
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
@@ -13,6 +13,8 @@ from datetime import datetime
 from pathlib import Path
 import os
 import logging
+
+from config import AppConfig
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -27,7 +29,7 @@ class ChartGenerationInput(BaseModel):
         description="Dados em formato JSON string para o gráfico"
     )
     output_path: str = Field(
-        default=str(Path(os.getenv("SRAG_OUTPUT_DIR", Path.cwd() / "outputs" / "reports"))),
+        default=str(AppConfig.from_env().reports_dir),
         description="Caminho para salvar o gráfico"
     )
 
@@ -112,7 +114,7 @@ class ChartGenerationTool(BaseTool):
         return filename
 
     def _run(self, chart_type: str, data: str,
-             output_path: str | None = None) -> Dict[str, Any]:
+             output_path: Optional[str] = None) -> Dict[str, Any]:
         """
         Executa a geração de gráfico.
 
@@ -133,7 +135,7 @@ class ChartGenerationTool(BaseTool):
             data_obj = json.loads(data) if isinstance(data, str) else data
 
             if output_path is None:
-                output_path = str(Path(os.getenv("SRAG_OUTPUT_DIR", Path.cwd() / "outputs" / "reports")))
+                output_path = str(AppConfig.from_env().reports_dir)
 
             # Criar diretório se não existir
             os.makedirs(output_path, exist_ok=True)

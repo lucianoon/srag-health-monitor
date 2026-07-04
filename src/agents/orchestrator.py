@@ -8,9 +8,10 @@ automatizados sobre a situação de SRAG no Brasil.
 from tools.chart_tool import create_chart_tool
 from tools.news_tool import create_news_tool
 from tools.database_tool import create_database_tool
-from typing import TypedDict, Annotated, Sequence
+from config import AppConfig
+from typing import Optional, TypedDict, Annotated, Sequence
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
+from langchain_core.messages import BaseMessage
 import operator
 import os
 import sys
@@ -42,25 +43,37 @@ class AgentState(TypedDict):
 class SRAGReportOrchestrator:
     """Orquestrador para geração de relatórios de SRAG."""
 
-    def __init__(self, model_name: str = "gpt-4.1-mini"):
+    def __init__(self, model_name: Optional[str] = None, config: Optional[AppConfig] = None):
         """
         Inicializa o orquestrador.
 
         Args:
             model_name: Nome do modelo LLM a usar
         """
-        self.model_name = model_name
-        self.llm = ChatOpenAI(model=model_name, temperature=0.3)
+        self.config = config or AppConfig.from_env(model_name=model_name)
+        self.config.ensure_runtime_dirs()
+        self.model_name = self.config.model_name
+        self.llm = (
+            ChatOpenAI(model=self.model_name, temperature=0.3)
+            if self.config.openai_api_key
+            else None
+        )
 
         # Criar ferramentas
-        self.database_tool = create_database_tool()
+        self.database_tool = create_database_tool(db_path=str(self.config.db_path))
         self.news_tool = create_news_tool()
         self.chart_tool = create_chart_tool()
 
         # ID de execução
-        self.execution_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.execution_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        self.last_metrics = {}
+        self.last_daily_cases = {}
+        self.last_monthly_cases = {}
+        self.last_news = {}
+        self.last_charts = {}
+        self.report_path = self.config.reports_dir / f"relatorio_{self.execution_id}.md"
 
-        logger.info(f"Orquestrador inicializado com modelo {model_name}")
+        logger.info(f"Orquestrador inicializado com modelo {self.model_name}")
 
     def collect_metrics(self) -> dict:
         """Coleta métricas do banco de dados."""
@@ -86,6 +99,12 @@ class SRAGReportOrchestrator:
         result = self.news_tool._run(max_results=max_results)
         return result
 
+    @staticmethod
+    def _raise_if_tool_error(result: dict, context: str) -> None:
+        """Interrompe a execução quando uma ferramenta reporta erro."""
+        if result.get("error"):
+            raise RuntimeError(f"{context}: {result['error']}")
+
     def generate_charts(self, daily_data: dict, monthly_data: dict) -> dict:
         """Gera gráficos de visualização."""
         logger.info("Gerando gráficos de visualização")
@@ -96,7 +115,8 @@ class SRAGReportOrchestrator:
         if 'daily_cases' in daily_data:
             daily_result = self.chart_tool._run(
                 chart_type="daily",
-                data=json.dumps(daily_data['daily_cases'])
+                data=json.dumps(daily_data['daily_cases']),
+                output_path=str(self.config.reports_dir)
             )
             charts['daily'] = daily_result
 
@@ -104,7 +124,8 @@ class SRAGReportOrchestrator:
         if 'monthly_cases' in monthly_data:
             monthly_result = self.chart_tool._run(
                 chart_type="monthly",
-                data=json.dumps(monthly_data['monthly_cases'])
+                data=json.dumps(monthly_data['monthly_cases']),
+                output_path=str(self.config.reports_dir)
             )
             charts['monthly'] = monthly_result
 
@@ -231,26 +252,36 @@ Com base nos dados mais recentes do DATASUS, foram registrados **{metrics.get('t
         try:
             # 1. Coletar métricas
             metrics = self.collect_metrics()
+            self._raise_if_tool_error(metrics, "Falha ao coletar métricas")
+            self.last_metrics = metrics
 
             # 2. Coletar dados para gráficos
             daily_cases = self.collect_daily_cases(days=30)
+            self._raise_if_tool_error(daily_cases, "Falha ao coletar casos diários")
+            self.last_daily_cases = daily_cases
             monthly_cases = self.collect_monthly_cases(months=12)
+            self._raise_if_tool_error(monthly_cases, "Falha ao coletar casos mensais")
+            self.last_monthly_cases = monthly_cases
 
             # 3. Coletar notícias
             news = self.collect_news(max_results=5)
+            self._raise_if_tool_error(news, "Falha ao coletar notícias")
+            self.last_news = news
 
             # 4. Gerar gráficos
             charts = self.generate_charts(daily_cases, monthly_cases)
+            for chart_name, chart_result in charts.items():
+                self._raise_if_tool_error(chart_result, f"Falha ao gerar gráfico {chart_name}")
+            self.last_charts = charts
 
             # 5. Gerar relatório
             report = self.generate_report(metrics, news, charts)
 
             # 6. Salvar relatório
-            report_path = f"/home/ubuntu/srag-health-monitor/outputs/reports/relatorio_{self.execution_id}.md"
-            with open(report_path, 'w', encoding='utf-8') as f:
+            with open(self.report_path, 'w', encoding='utf-8') as f:
                 f.write(report)
 
-            logger.info(f"Relatório salvo em: {report_path}")
+            logger.info(f"Relatório salvo em: {self.report_path}")
 
             return report
 
