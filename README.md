@@ -281,6 +281,7 @@ make worker-once
 | `SRAG_MODEL` | `gpt-4.1-mini` | modelo configurado |
 | `SRAG_SUS_DATA_URL` | vazio | URL do recurso CSV SRAG no portal oficial |
 | `SRAG_SUS_INGEST_NROWS` | vazio | limite opcional de linhas para smoke tests |
+| `SRAG_NEWS_FEEDS` | vazio | JSON opcional para sobrescrever os feeds RSS de notícias |
 
 ## Validação
 
@@ -313,8 +314,14 @@ fontes reconhecidas em vigilância epidemiológica no Brasil:
 
 Os itens são ordenados por relevância ao tema de SRAG/vírus respiratórios e por
 data. Em caso de falha de rede ou parsing, a busca degrada para uma lista vazia
-— o sistema nunca fabrica notícias nem estatísticas. Os feeds podem ser
-sobrescritos ao instanciar `NewsSearchTool(feeds=[...])`.
+— o sistema nunca fabrica notícias nem estatísticas.
+
+Os feeds podem ser sobrescritos pela variável `SRAG_NEWS_FEEDS` (JSON), por
+exemplo:
+
+```bash
+SRAG_NEWS_FEEDS='[{"name":"Agência Fiocruz","url":"https://agencia.fiocruz.br/rss.xml"}]'
+```
 
 ## Governança
 

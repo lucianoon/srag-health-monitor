@@ -37,7 +37,7 @@ class SUSDataIngestionAgent:
     def __init__(self, config: AppConfig):
         self.config = config
         self.database_tool = create_database_tool(db_path=str(config.db_path))
-        self.news_tool = create_news_tool()
+        self.news_tool = create_news_tool(feeds=config.news_feeds)
 
     def collect(self, days: int = 30, months: int = 12, news_limit: int = 5) -> DataSnapshot:
         """Coleta métricas, séries temporais, notícias e metadados da fonte."""

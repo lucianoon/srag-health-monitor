@@ -61,7 +61,7 @@ class SRAGReportOrchestrator:
 
         # Criar ferramentas
         self.database_tool = create_database_tool(db_path=str(self.config.db_path))
-        self.news_tool = create_news_tool()
+        self.news_tool = create_news_tool(feeds=self.config.news_feeds)
         self.chart_tool = create_chart_tool()
 
         # ID de execução

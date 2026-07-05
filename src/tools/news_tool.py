@@ -20,18 +20,10 @@ from bs4 import BeautifulSoup
 from langchain.tools import BaseTool
 from pydantic import BaseModel, Field
 
+from config import DEFAULT_NEWS_FEEDS
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-
-# Feeds oficiais/reconhecidos em saúde pública no Brasil.
-DEFAULT_NEWS_FEEDS: List[Dict[str, str]] = [
-    {"name": "Agência Fiocruz de Notícias", "url": "https://agencia.fiocruz.br/rss.xml"},
-    {
-        "name": "Agência Brasil - Saúde",
-        "url": "https://agenciabrasil.ebc.com.br/rss/saude/feed.xml",
-    },
-]
 
 # Termos que tornam uma notícia relevante para um relatório de SRAG.
 RELEVANCE_TERMS = (
@@ -254,8 +246,10 @@ class NewsSearchTool(BaseTool):
         raise NotImplementedError("Versão assíncrona não implementada")
 
 
-def create_news_tool() -> NewsSearchTool:
+def create_news_tool(feeds: Optional[List[Dict[str, str]]] = None) -> NewsSearchTool:
     """Cria e retorna uma instância da ferramenta de notícias."""
+    if feeds:
+        return NewsSearchTool(feeds=list(feeds))
     return NewsSearchTool()
 
 

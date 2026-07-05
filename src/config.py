@@ -5,10 +5,57 @@ Este módulo concentra caminhos e opções de runtime para evitar acoplamento a
 um ambiente específico. Variáveis de ambiente continuam tendo precedência.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Union
+from typing import List, Optional, Union
+from urllib.parse import urlparse
+import json
+import logging
 import os
+
+
+logger = logging.getLogger(__name__)
+
+
+# Feeds oficiais/reconhecidos em vigilância epidemiológica no Brasil.
+# Agência Fiocruz carrega os boletins InfoGripe (referência nacional de SRAG).
+DEFAULT_NEWS_FEEDS: List[dict] = [
+    {"name": "Agência Fiocruz de Notícias", "url": "https://agencia.fiocruz.br/rss.xml"},
+    {
+        "name": "Agência Brasil - Saúde",
+        "url": "https://agenciabrasil.ebc.com.br/rss/saude/feed.xml",
+    },
+]
+
+
+def _parse_news_feeds(raw: Optional[str]) -> List[dict]:
+    """Interpreta SRAG_NEWS_FEEDS; volta ao default se ausente ou inválido.
+
+    Aceita um JSON: lista de objetos {"name", "url"} ou lista de URLs (string).
+    """
+    if not raw or not raw.strip():
+        return [dict(feed) for feed in DEFAULT_NEWS_FEEDS]
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        logger.warning("SRAG_NEWS_FEEDS inválido (JSON); usando feeds padrão")
+        return [dict(feed) for feed in DEFAULT_NEWS_FEEDS]
+
+    feeds: List[dict] = []
+    for entry in parsed if isinstance(parsed, list) else []:
+        if isinstance(entry, str):
+            url = entry.strip()
+            if url:
+                feeds.append({"name": urlparse(url).netloc or url, "url": url})
+        elif isinstance(entry, dict) and entry.get("url"):
+            url = str(entry["url"]).strip()
+            feeds.append({"name": str(entry.get("name") or urlparse(url).netloc), "url": url})
+
+    if not feeds:
+        logger.warning("SRAG_NEWS_FEEDS sem entradas válidas; usando feeds padrão")
+        return [dict(feed) for feed in DEFAULT_NEWS_FEEDS]
+    return feeds
 
 
 @dataclass(frozen=True)
@@ -26,6 +73,7 @@ class AppConfig:
     api_key: Optional[str] = None
     sus_data_url: Optional[str] = None
     sus_ingest_nrows: Optional[int] = None
+    news_feeds: List[dict] = field(default_factory=lambda: [dict(f) for f in DEFAULT_NEWS_FEEDS])
 
     @classmethod
     def from_env(
@@ -74,6 +122,7 @@ class AppConfig:
             api_key=os.getenv("SRAG_API_KEY"),
             sus_data_url=os.getenv("SRAG_SUS_DATA_URL"),
             sus_ingest_nrows=cls._optional_int(os.getenv("SRAG_SUS_INGEST_NROWS")),
+            news_feeds=_parse_news_feeds(os.getenv("SRAG_NEWS_FEEDS")),
         )
 
     def ensure_runtime_dirs(self) -> None:
