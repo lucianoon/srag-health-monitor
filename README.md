@@ -303,6 +303,19 @@ Fonte de referência:
 - OpenDATASUS/SIVEP-Gripe: https://opendatasus.saude.gov.br/dataset/srag-2021-a-2024
 - Portal atual de dados abertos do SUS: https://dadosabertos.saude.gov.br
 
+## Notícias
+
+As notícias dos relatórios são obtidas em tempo de execução de feeds RSS de
+fontes reconhecidas em vigilância epidemiológica no Brasil:
+
+- Agência Fiocruz de Notícias (inclui os boletins InfoGripe): `https://agencia.fiocruz.br/rss.xml`
+- Agência Brasil / EBC — editoria de Saúde: `https://agenciabrasil.ebc.com.br/rss/saude/feed.xml`
+
+Os itens são ordenados por relevância ao tema de SRAG/vírus respiratórios e por
+data. Em caso de falha de rede ou parsing, a busca degrada para uma lista vazia
+— o sistema nunca fabrica notícias nem estatísticas. Os feeds podem ser
+sobrescritos ao instanciar `NewsSearchTool(feeds=[...])`.
+
 ## Governança
 
 - Logs estruturados em JSONL.

@@ -33,7 +33,27 @@ from services.report_service import GenerateReportService
 from services.report_worker import ReportWorker
 from tools.chart_tool import create_chart_tool
 from tools.database_tool import DatabaseQueryTool
-from tools.news_tool import create_news_tool
+import requests
+
+from tools.news_tool import NewsSearchTool, create_news_tool, parse_feed
+
+
+def setUpModule():
+    """Mantém o suite offline: o fetch real de notícias é desabilitado por padrão.
+
+    Testes que exercitam o parsing/ranking injetam seu próprio fetch por
+    instância (o atributo de instância sombreia este stub de classe).
+    """
+    def _offline_fetch(self, url):
+        raise requests.RequestException("rede desabilitada em testes")
+
+    global _ORIGINAL_FETCH_FEED
+    _ORIGINAL_FETCH_FEED = NewsSearchTool._fetch_feed
+    NewsSearchTool._fetch_feed = _offline_fetch
+
+
+def tearDownModule():
+    NewsSearchTool._fetch_feed = _ORIGINAL_FETCH_FEED
 
 
 class TempSRAGDatabaseMixin:
@@ -123,23 +143,81 @@ class TestDatabaseTool(TempSRAGDatabaseMixin, unittest.TestCase):
         self.assertIsInstance(result["monthly_cases"], list)
 
 
-class TestNewsTool(unittest.TestCase):
-    def setUp(self):
-        self.tool = create_news_tool()
+SAMPLE_FIOCRUZ_FEED = b"""<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Agencia Fiocruz</title>
+    <item>
+      <title>Nav. ed. pt Bibliotecas</title>
+      <link>https://agencia.fiocruz.br/nav</link>
+      <pubDate>Thu, 02 Jul 2026 18:05:40 +0000</pubDate>
+      <description>menu de navegacao</description>
+    </item>
+    <item>
+      <title>InfoGripe alerta para alta de casos de SRAG no pais</title>
+      <link>https://agencia.fiocruz.br/infogripe-srag</link>
+      <pubDate>Thu, 02 Jul 2026 14:07:27 +0000</pubDate>
+      <description>&lt;p&gt;Boletim aponta &lt;b&gt;aumento&lt;/b&gt; de casos de SRAG.&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>Fiocruz inaugura novo predio administrativo</title>
+      <link>https://agencia.fiocruz.br/predio</link>
+      <pubDate>Wed, 01 Jul 2026 10:00:00 +0000</pubDate>
+      <description>Nota institucional sem relacao com epidemiologia.</description>
+    </item>
+  </channel>
+</rss>"""
 
-    def test_search_news(self):
-        result = self.tool._run(max_results=3)
+
+class TestNewsFeedParsing(unittest.TestCase):
+    def test_parse_feed_strips_html_and_normalizes_date(self):
+        items = parse_feed(SAMPLE_FIOCRUZ_FEED, "Agência Fiocruz")
+        titles = [item["title"] for item in items]
+
+        self.assertNotIn("Nav. ed. pt Bibliotecas", titles)  # item de navegação filtrado
+        srag_item = next(item for item in items if "InfoGripe" in item["title"])
+        self.assertEqual(srag_item["source"], "Agência Fiocruz")
+        self.assertEqual(srag_item["date"], "2026-07-02")
+        self.assertNotIn("<", srag_item["summary"])  # HTML removido
+        self.assertIn("SRAG", srag_item["summary"])
+        self.assertTrue(srag_item["url"].startswith("https://"))
+
+
+class TestNewsTool(unittest.TestCase):
+    def _tool_with_feed(self, content):
+        tool = create_news_tool()
+        tool.feeds = [{"name": "Fonte Teste", "url": "https://example.test/feed"}]
+        tool._fetch_feed = lambda url: content
+        return tool
+
+    def test_search_news_ranks_relevant_items_first(self):
+        tool = self._tool_with_feed(SAMPLE_FIOCRUZ_FEED)
+        result = tool._run(max_results=3)
+
         self.assertIn("news", result)
         self.assertIn("total_results", result)
-        self.assertEqual(len(result["news"]), 3)
+        # 2 itens válidos (o de navegação é filtrado); o de SRAG vem primeiro.
+        self.assertEqual(len(result["news"]), 2)
+        self.assertIn("SRAG", result["news"][0]["title"])
 
     def test_news_structure(self):
-        result = self.tool._run(max_results=1)
+        tool = self._tool_with_feed(SAMPLE_FIOCRUZ_FEED)
+        result = tool._run(max_results=1)
         news_item = result["news"][0]
-        self.assertIn("title", news_item)
-        self.assertIn("summary", news_item)
-        self.assertIn("source", news_item)
-        self.assertIn("date", news_item)
+        for key in ("title", "summary", "source", "date", "url"):
+            self.assertIn(key, news_item)
+
+    def test_search_news_degrades_gracefully_on_fetch_failure(self):
+        def failing_fetch(url):
+            raise requests.RequestException("rede indisponível")
+
+        tool = create_news_tool()
+        tool._fetch_feed = failing_fetch
+        result = tool._run(max_results=5)
+
+        # Sem rede, retorna lista vazia sem fabricar notícias.
+        self.assertEqual(result["news"], [])
+        self.assertEqual(result["total_results"], 0)
 
 
 class TestChartTool(unittest.TestCase):
