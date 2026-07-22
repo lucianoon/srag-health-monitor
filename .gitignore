@@ -41,6 +41,7 @@ env/
 data/raw/*.csv
 data/processed/*.csv
 data/jobs.db
+data/pipeline_state/
 *.db
 *.sqlite
 

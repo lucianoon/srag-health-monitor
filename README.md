@@ -35,11 +35,21 @@ Worker
         v
 GenerateReportService / Multi-Agent Orchestrator
         |
-        +--> SUSDataIngestionAgent -> data/srag.db + notícias
-        +--> EpidemiologyAnalysisAgent -> achados e risco
-        +--> ReportWriterAgent -> gráficos + Markdown
+        v
+Blackboard de etapas (estado por execução em data/pipeline_state/)
+        |
+        +--> collect_data  ─┐ (paralelo)  SUSDataIngestionAgent -> data/srag.db
+        +--> collect_news  ─┘             SUSDataIngestionAgent -> feeds RSS
+        +--> analyze                      EpidemiologyAnalysisAgent -> achados e risco
+        +--> generate_charts              ReportWriterAgent -> gráficos
+        +--> write_report                 ReportWriterAgent -> Markdown
         +--> AuditLogger -> outputs/logs
 ```
+
+As etapas não se chamam entre si: cada uma declara pré-condições sobre o
+estado compartilhado e roda quando elas são satisfeitas (coordenação por
+blackboard). O progresso é persistido por etapa — reexecutar com o mesmo
+`execution_id` retoma do ponto da falha sem refazer o que já foi concluído.
 
 ## Estrutura
 

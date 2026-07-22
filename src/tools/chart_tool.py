@@ -7,6 +7,12 @@ Esta ferramenta permite que o agente gere gráficos de visualização de dados.
 from langchain.tools import BaseTool
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
+import matplotlib
+
+# Backend não-interativo: a etapa de gráficos roda fora da main thread no
+# blackboard do pipeline, e backends interativos não suportam isso.
+matplotlib.use("Agg")
+
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from datetime import datetime
