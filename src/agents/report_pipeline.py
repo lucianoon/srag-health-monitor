@@ -29,6 +29,11 @@ from services.report_blackboard import ReportBlackboard, Step
 logger = logging.getLogger(__name__)
 
 
+def new_execution_id() -> str:
+    """Gera um execution_id novo no formato usado em relatórios e estado."""
+    return datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+
+
 class SRAGMultiAgentReportOrchestrator:
     """Coordena ingestão, análise epidemiológica e escrita de relatório."""
 
@@ -40,7 +45,7 @@ class SRAGMultiAgentReportOrchestrator:
         self.config = config or AppConfig.from_env()
         self.config.ensure_runtime_dirs()
         # Reaproveitar um execution_id retoma a execução do ponto da falha.
-        self.execution_id = execution_id or datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        self.execution_id = execution_id or new_execution_id()
         self.report_path = self.config.reports_dir / f"relatorio_{self.execution_id}.md"
         self.state_path = (
             self.config.data_dir / "pipeline_state" / f"{self.execution_id}.json"

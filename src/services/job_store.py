@@ -50,6 +50,9 @@ class JobStore(Protocol):
     def mark_running(self, job_id: str) -> None:
         """Marca o job como em execução."""
 
+    def set_execution_id(self, job_id: str, execution_id: str) -> None:
+        """Registra o execution_id no início da execução (permite retry)."""
+
     def mark_succeeded(
         self,
         job_id: str,
@@ -113,6 +116,10 @@ class InMemoryJobStore:
     def mark_running(self, job_id: str) -> None:
         """Marca o job como em execução."""
         self._update(job_id, status=JobStatus.RUNNING)
+
+    def set_execution_id(self, job_id: str, execution_id: str) -> None:
+        """Registra o execution_id no início da execução (permite retry)."""
+        self._update(job_id, execution_id=execution_id)
 
     def mark_succeeded(
         self,
@@ -239,6 +246,10 @@ class SQLiteJobStore:
     def mark_running(self, job_id: str) -> None:
         """Marca o job como em execução."""
         self._update(job_id, status=JobStatus.RUNNING.value)
+
+    def set_execution_id(self, job_id: str, execution_id: str) -> None:
+        """Registra o execution_id no início da execução (permite retry)."""
+        self._update(job_id, execution_id=execution_id)
 
     def mark_succeeded(
         self,

@@ -209,6 +209,41 @@ def create_report_job(
     )
 
 
+@app.post(
+    "/reports/{job_id}/retry",
+    response_model=CreateReportJobResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def retry_report_job(
+    job_id: str,
+    _auth: None = Depends(require_api_key),
+) -> CreateReportJobResponse:
+    """Recria um job falho reaproveitando o execution_id original.
+
+    O pipeline retoma do ponto da falha usando o estado persistido por
+    etapa — etapas já concluídas não são refeitas.
+    """
+    job = job_store.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job não encontrado")
+    if job.status != JobStatus.FAILED:
+        raise HTTPException(
+            status_code=409,
+            detail="Apenas jobs com falha podem ser re-tentados",
+        )
+
+    payload = dict(job.payload)
+    if job.execution_id:
+        payload["execution_id"] = job.execution_id
+    retry_job = job_store.create(payload=payload)
+
+    return CreateReportJobResponse(
+        job_id=retry_job.job_id,
+        status=retry_job.status,
+        status_url=f"/reports/{retry_job.job_id}",
+    )
+
+
 @app.get("/reports", response_model=List[ReportJobResponse])
 def list_report_jobs(
     limit: int = Query(default=20, ge=1, le=100),

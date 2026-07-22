@@ -4,6 +4,7 @@ import logging
 from time import sleep
 from typing import Optional
 
+from agents.report_pipeline import new_execution_id
 from config import AppConfig
 from guardrails.audit_logger import ExecutionTracker, create_audit_logger
 from services.job_store import JobStore, ReportJob
@@ -27,6 +28,11 @@ class ReportWorker:
 
         logger.info("Executando job de relatório: %s", job.job_id)
 
+        # Registrado antes de executar: um job que falhar carrega o
+        # execution_id necessário para o retry retomar do ponto da falha.
+        execution_id = job.payload.get("execution_id") or new_execution_id()
+        self.job_store.set_execution_id(job.job_id, execution_id)
+
         try:
             config = AppConfig.from_env(
                 model_name=job.payload.get("model"),
@@ -40,7 +46,7 @@ class ReportWorker:
                 audit_logger=create_audit_logger(config.logs_dir),
                 execution_tracker=ExecutionTracker(),
             )
-            result = service.run()
+            result = service.run(execution_id=execution_id)
 
         except Exception as exc:
             self.job_store.mark_failed(job.job_id, str(exc))

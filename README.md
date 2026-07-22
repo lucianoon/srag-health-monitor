@@ -24,7 +24,8 @@ O projeto evoluiu de uma PoC para uma base de produto operável:
 Cliente/API Consumer
         |
         v
-FastAPI (/reports, /reports/{job_id}, /reports/{job_id}/artifact, /metrics)
+FastAPI (/reports, /reports/{job_id}, /reports/{job_id}/retry,
+         /reports/{job_id}/artifact, /metrics)
         |
         v
 SQLite jobs store (data/jobs.db)
@@ -225,6 +226,18 @@ Estados possíveis:
 - `running`
 - `succeeded`
 - `failed`
+
+### `POST /reports/{job_id}/retry`
+
+Recria um job **falho** reaproveitando o `execution_id` original. O pipeline
+retoma do ponto da falha usando o estado persistido por etapa no blackboard —
+etapas já concluídas (ex.: ingestão) não são refeitas.
+
+Retornos comuns:
+
+- `202`: novo job criado (mesmo formato de `POST /reports`)
+- `409`: job não está em `failed`
+- `404`: job não encontrado
 
 ### `GET /reports/{job_id}/artifact`
 
