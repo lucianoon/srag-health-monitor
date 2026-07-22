@@ -884,6 +884,59 @@ class TestReportWorker(TempSRAGDatabaseMixin, unittest.TestCase):
         self.assertEqual(result.status, JobStatus.FAILED)
         self.assertIn("Banco de dados não encontrado", result.error)
 
+    def test_failed_job_records_execution_id(self):
+        store = SQLiteJobStore(Path(self.tmpdir.name) / "jobs.db")
+        store.create(payload={
+            "db_path": str(Path(self.tmpdir.name) / "missing.db"),
+            "output_dir": str(Path(self.tmpdir.name) / "reports"),
+        })
+        worker = ReportWorker(store, poll_interval_seconds=0.01)
+
+        result = worker.run_once()
+
+        self.assertEqual(result.status, JobStatus.FAILED)
+        self.assertIsNotNone(result.execution_id)
+
+    def test_retry_job_resumes_from_persisted_state(self):
+        os.environ["SRAG_DATA_DIR"] = self.tmpdir.name
+        self.addCleanup(os.environ.pop, "SRAG_DATA_DIR", None)
+
+        store = SQLiteJobStore(Path(self.tmpdir.name) / "jobs.db")
+        payload = {
+            "db_path": self.db_path,
+            "output_dir": str(Path(self.tmpdir.name) / "reports"),
+        }
+        worker = ReportWorker(store, poll_interval_seconds=0.01)
+
+        store.create(payload=payload)
+        with mock.patch.object(
+            ReportWriterAgent,
+            "write",
+            side_effect=RuntimeError("falha simulada na escrita"),
+        ):
+            failed = worker.run_once()
+
+        self.assertEqual(failed.status, JobStatus.FAILED)
+        self.assertIsNotNone(failed.execution_id)
+        state_path = (
+            Path(self.tmpdir.name) / "pipeline_state" / f"{failed.execution_id}.json"
+        )
+        self.assertTrue(state_path.exists())
+
+        # Mesmo fluxo do endpoint de retry: payload original + execution_id.
+        store.create(payload={**failed.payload, "execution_id": failed.execution_id})
+        with mock.patch.object(
+            SUSDataIngestionAgent,
+            "collect_data",
+            side_effect=AssertionError("retomada não deveria recoletar dados"),
+        ):
+            retried = worker.run_once()
+
+        self.assertEqual(retried.status, JobStatus.SUCCEEDED)
+        self.assertEqual(retried.execution_id, failed.execution_id)
+        self.assertTrue(Path(retried.report_path).exists())
+        self.assertFalse(state_path.exists())
+
 
 class TestApi(unittest.TestCase):
     def setUp(self):
@@ -983,6 +1036,34 @@ class TestApi(unittest.TestCase):
         response = self.client.get(f"/reports/{job.job_id}/artifact")
 
         self.assertEqual(response.status_code, 409)
+
+    def test_retry_failed_job_creates_job_with_same_execution_id(self):
+        job = self.store.create(payload={"db_path": "srag.db"})
+        self.store.set_execution_id(job.job_id, "exec-42")
+        self.store.mark_failed(job.job_id, "boom")
+
+        response = self.client.post(f"/reports/{job.job_id}/retry")
+
+        self.assertEqual(response.status_code, 202)
+        body = response.json()
+        self.assertNotEqual(body["job_id"], job.job_id)
+        self.assertEqual(body["status"], "queued")
+
+        retry_job = self.store.get(body["job_id"])
+        self.assertEqual(retry_job.payload["execution_id"], "exec-42")
+        self.assertEqual(retry_job.payload["db_path"], "srag.db")
+
+    def test_retry_rejects_job_that_did_not_fail(self):
+        job = self.store.create()
+
+        response = self.client.post(f"/reports/{job.job_id}/retry")
+
+        self.assertEqual(response.status_code, 409)
+
+    def test_retry_unknown_job_returns_404(self):
+        response = self.client.post("/reports/nao-existe/retry")
+
+        self.assertEqual(response.status_code, 404)
 
     def test_api_key_is_required_when_configured(self):
         os.environ["SRAG_API_KEY"] = "secret-token"

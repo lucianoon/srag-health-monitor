@@ -8,7 +8,7 @@ API HTTP ou workers assíncronos.
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
-from typing import List
+from typing import List, Optional
 
 from agents.report_pipeline import SRAGMultiAgentReportOrchestrator
 from config import AppConfig
@@ -42,9 +42,16 @@ class GenerateReportService:
         self.audit_logger = audit_logger
         self.execution_tracker = execution_tracker
 
-    def run(self) -> GenerateReportResult:
-        """Gera, valida, audita e retorna um relatório de SRAG."""
-        orchestrator = SRAGMultiAgentReportOrchestrator(config=self.config)
+    def run(self, execution_id: Optional[str] = None) -> GenerateReportResult:
+        """Gera, valida, audita e retorna um relatório de SRAG.
+
+        Passar o execution_id de uma execução que falhou retoma o pipeline
+        do ponto da falha (estado persistido por etapa no blackboard).
+        """
+        orchestrator = SRAGMultiAgentReportOrchestrator(
+            config=self.config,
+            execution_id=execution_id,
+        )
         execution_id = orchestrator.execution_id
         self.execution_tracker.start_execution(execution_id)
 
