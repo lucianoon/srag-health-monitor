@@ -41,6 +41,16 @@ class SUSDataIngestionAgent:
 
     def collect(self, days: int = 30, months: int = 12, news_limit: int = 5) -> DataSnapshot:
         """Coleta métricas, séries temporais, notícias e metadados da fonte."""
+        data = self.collect_data(days=days, months=months)
+        news = self.collect_news(news_limit=news_limit)
+        return DataSnapshot(**data, **news)
+
+    def collect_data(self, days: int = 30, months: int = 12) -> dict:
+        """Coleta métricas, séries temporais e metadados da fonte oficial.
+
+        Etapa independente da coleta de notícias — as duas podem rodar em
+        paralelo no blackboard do pipeline.
+        """
         logger.info("Agente de ingestão coletando dados de SRAG")
         self._ensure_source_available()
 
@@ -53,16 +63,19 @@ class SUSDataIngestionAgent:
         monthly_cases = self.database_tool._run(query_type="monthly_cases", months=months)
         self._raise_if_tool_error(monthly_cases, "Falha ao coletar casos mensais")
 
+        return {
+            "metrics": metrics,
+            "daily_cases": daily_cases,
+            "monthly_cases": monthly_cases,
+            "source": self._source_metadata(),
+        }
+
+    def collect_news(self, news_limit: int = 5) -> dict:
+        """Coleta notícias recentes sobre SRAG nos feeds configurados."""
+        logger.info("Agente de ingestão coletando notícias de SRAG")
         news = self.news_tool._run(max_results=news_limit)
         self._raise_if_tool_error(news, "Falha ao coletar notícias")
-
-        return DataSnapshot(
-            metrics=metrics,
-            daily_cases=daily_cases,
-            monthly_cases=monthly_cases,
-            news=news,
-            source=self._source_metadata(),
-        )
+        return {"news": news}
 
     def refresh_cache(
         self,
