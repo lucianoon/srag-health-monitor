@@ -4,9 +4,14 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
-import tests.conftest  # noqa: F401  garante src/ no sys.path
-from services.job_store import InMemoryJobStore
+from tests.conftest import offline_news_guard  # também garante src/ no sys.path
+from services.job_store import InMemoryJobStore, JobStatus
+
+# Mantém o módulo offline: POST /reports/sync executa o pipeline completo,
+# incluindo a coleta de notícias.
+setUpModule, tearDownModule = offline_news_guard()
 
 
 class TestApi(unittest.TestCase):
@@ -67,6 +72,24 @@ class TestApi(unittest.TestCase):
         self.assertIsInstance(response.json(), list)
         self.assertGreaterEqual(len(response.json()), 1)
 
+    def test_list_report_jobs_filters_by_status(self):
+        self.store.create()
+        failed = self.store.create()
+        self.store.mark_failed(failed.job_id, "boom")
+
+        response = self.client.get("/reports?status=failed")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(len(body), 1)
+        self.assertEqual(body[0]["job_id"], failed.job_id)
+        self.assertEqual(body[0]["status"], JobStatus.FAILED.value)
+
+    def test_get_unknown_report_job_returns_404(self):
+        response = self.client.get("/reports/nao-existe")
+
+        self.assertEqual(response.status_code, 404)
+
     def test_metrics_endpoint_counts_jobs(self):
         self.store.create()
         failed = self.store.create()
@@ -107,6 +130,53 @@ class TestApi(unittest.TestCase):
         response = self.client.get(f"/reports/{job.job_id}/artifact")
 
         self.assertEqual(response.status_code, 409)
+
+    def _mark_succeeded_with_artifact(self, report_path: Path) -> str:
+        job = self.store.create()
+        self.store.mark_succeeded(
+            job.job_id,
+            execution_id="exec-1",
+            report_path=str(report_path),
+            duration_ms=10.0,
+            pii_detected=False,
+            pii_types=[],
+            summary={"success": True},
+        )
+        return job.job_id
+
+    def test_download_report_artifact_rejects_non_markdown(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            artifact = Path(tmpdir) / "report.txt"
+            artifact.write_text("conteudo", encoding="utf-8")
+            job_id = self._mark_succeeded_with_artifact(artifact)
+
+            response = self.client.get(f"/reports/{job_id}/artifact")
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_download_report_artifact_missing_file_returns_404(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            job_id = self._mark_succeeded_with_artifact(
+                Path(tmpdir) / "inexistente.md"
+            )
+
+            response = self.client.get(f"/reports/{job_id}/artifact")
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_sync_report_returns_500_when_database_is_missing(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch.dict(os.environ, {"SRAG_DATA_DIR": tmpdir}, clear=False):
+                response = self.client.post(
+                    "/reports/sync",
+                    json={
+                        "db_path": str(Path(tmpdir) / "missing.db"),
+                        "output_dir": str(Path(tmpdir) / "reports"),
+                    },
+                )
+
+        self.assertEqual(response.status_code, 500)
+        self.assertIn("Banco de dados não encontrado", response.json()["detail"])
 
     def test_retry_failed_job_creates_job_with_same_execution_id(self):
         job = self.store.create(payload={"db_path": "srag.db"})

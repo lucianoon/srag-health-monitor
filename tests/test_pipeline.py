@@ -99,6 +99,52 @@ class TestReportBlackboard(unittest.TestCase):
                 [Step(name="a", run=lambda artifacts: {}, requires=("fantasma",))]
             )
 
+    def test_duplicate_step_names_are_rejected(self):
+        with self.assertRaises(ValueError):
+            ReportBlackboard(
+                [
+                    Step(name="a", run=lambda artifacts: {}),
+                    Step(name="a", run=lambda artifacts: {}),
+                ]
+            )
+
+    def test_circular_dependencies_block_the_pipeline(self):
+        board = ReportBlackboard(
+            [
+                Step(name="a", run=lambda artifacts: {}, requires=("b",)),
+                Step(name="b", run=lambda artifacts: {}, requires=("a",)),
+            ]
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "bloqueado"):
+            board.run()
+
+    def test_step_execution_error_preserves_step_name_and_cause(self):
+        cause = RuntimeError("boom")
+
+        def failing(artifacts):
+            raise cause
+
+        board = ReportBlackboard([Step(name="quebra", run=failing)])
+
+        with self.assertRaises(StepExecutionError) as ctx:
+            board.run()
+
+        self.assertEqual(ctx.exception.step_name, "quebra")
+        self.assertIs(ctx.exception.cause, cause)
+
+    def test_clear_state_removes_state_file(self):
+        board = ReportBlackboard(
+            [Step(name="a", run=lambda artifacts: {"a": 1})],
+            state_path=self.state_path,
+        )
+        board.run()
+        self.assertTrue(self.state_path.exists())
+
+        board.clear_state()
+
+        self.assertFalse(self.state_path.exists())
+
 
 class TestMultiAgentPipeline(TempSRAGDatabaseMixin, unittest.TestCase):
     def setUp(self):

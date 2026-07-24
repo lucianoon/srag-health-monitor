@@ -92,6 +92,25 @@ class TestJobStore(unittest.TestCase):
         self.assertEqual([job.job_id for job in queued_jobs], [queued.job_id])
         self.assertEqual([job.job_id for job in failed_jobs], [failed.job_id])
 
+    def test_claim_next_returns_none_when_queue_is_empty(self):
+        self.assertIsNone(InMemoryJobStore().claim_next())
+
+    def test_sqlite_store_releases_file_handles(self):
+        # Regressão: conexões SQLite não fechadas mantinham jobs.db travado
+        # (PermissionError ao remover o arquivo no Windows).
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "jobs.db"
+            store = SQLiteJobStore(db_path)
+            job = store.create()
+            store.claim_next()
+            store.mark_failed(job.job_id, "boom")
+            store.list_recent()
+            store.status_counts()
+
+            db_path.unlink()  # falharia com conexões ainda abertas
+
+            self.assertFalse(db_path.exists())
+
     def test_sqlite_store_status_counts(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             store = SQLiteJobStore(Path(tmpdir) / "jobs.db")
