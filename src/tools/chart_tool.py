@@ -80,7 +80,10 @@ class ChartGenerationTool(BaseTool):
         plt.grid(True, alpha=0.3, linestyle='--')
         plt.tight_layout()
 
-        filename = os.path.join(output_path, 'casos_diarios.png')
+        # Timestamp no nome evita que execuções novas sobrescrevam gráficos
+        # referenciados por relatórios anteriores
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = os.path.join(output_path, f'casos_diarios_{timestamp}.png')
         plt.savefig(filename, dpi=300, bbox_inches='tight')
         plt.close()
 
@@ -112,7 +115,8 @@ class ChartGenerationTool(BaseTool):
         plt.grid(True, alpha=0.3, linestyle='--', axis='y')
         plt.tight_layout()
 
-        filename = os.path.join(output_path, 'casos_mensais.png')
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = os.path.join(output_path, f'casos_mensais_{timestamp}.png')
         plt.savefig(filename, dpi=300, bbox_inches='tight')
         plt.close()
 
