@@ -18,6 +18,18 @@ O projeto evoluiu de uma PoC para uma base de produto operável:
 - Docker Compose com serviços `api` e `worker`.
 - CI com testes, build Docker e smoke test de healthcheck.
 
+## Exemplo de Saída
+
+Cada execução do pipeline produz um relatório Markdown com métricas
+epidemiológicas, análise contextual, nível de risco e gráficos gerados
+a partir do banco:
+
+![Casos mensais de SRAG](docs/exemplo/casos_mensais.png)
+
+Veja o [relatório completo de exemplo](docs/exemplo/relatorio_exemplo.md)
+(gerado com dados sintéticos e a narrativa determinística — o mesmo pipeline
+roda com dados reais do DATASUS e, opcionalmente, narrativa via LLM).
+
 ## Arquitetura
 
 ```text
