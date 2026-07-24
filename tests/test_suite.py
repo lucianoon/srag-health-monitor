@@ -64,16 +64,17 @@ class TempSRAGDatabaseMixin:
     """Cria um banco SRAG temporário com dados determinísticos."""
 
     def setUp(self):
+        # addCleanup em vez de tearDown: cleanups rodam em ordem LIFO, então
+        # tudo que os testes registrarem depois (ex.: fechar conexões/handlers)
+        # executa ANTES da remoção do diretório temporário.
         self.tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmpdir.cleanup)
         self.db_path = os.path.join(self.tmpdir.name, "srag.db")
         self.db = SRAGDatabase(self.db_path)
         self.db.connect()
+        self.addCleanup(self.db.close)
         self.db.create_tables()
         self._insert_sample_rows()
-
-    def tearDown(self):
-        self.db.close()
-        self.tmpdir.cleanup()
 
     def _insert_sample_rows(self):
         cursor = self.db.conn.cursor()
@@ -465,10 +466,15 @@ class TestGenerateReportService(TempSRAGDatabaseMixin, unittest.TestCase):
             openai_api_key=None,
         )
 
+    def _make_audit_logger(self):
+        audit_logger = AuditLogger(self.log_dir)
+        self.addCleanup(audit_logger.close)
+        return audit_logger
+
     def test_generate_report_success(self):
         service = GenerateReportService(
             config=self.config,
-            audit_logger=AuditLogger(self.log_dir),
+            audit_logger=self._make_audit_logger(),
             execution_tracker=ExecutionTracker(),
         )
 
@@ -493,7 +499,7 @@ class TestGenerateReportService(TempSRAGDatabaseMixin, unittest.TestCase):
         )
         service = GenerateReportService(
             config=missing_config,
-            audit_logger=AuditLogger(self.log_dir),
+            audit_logger=self._make_audit_logger(),
             execution_tracker=ExecutionTracker(),
         )
 

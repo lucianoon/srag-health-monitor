@@ -1,5 +1,6 @@
 """Armazenamento simples de jobs para execução assíncrona."""
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -7,7 +8,7 @@ from pathlib import Path
 import json
 import sqlite3
 from threading import Lock
-from typing import Dict, List, Optional, Protocol, Union
+from typing import Dict, Iterator, List, Optional, Protocol, Union
 from uuid import uuid4
 
 
@@ -386,10 +387,21 @@ class SQLiteJobStore:
                 """
             )
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        """Abre uma conexão com commit/rollback e fechamento determinísticos.
+
+        ``sqlite3.Connection`` como context manager gerencia apenas a
+        transação; sem o ``close()`` explícito a conexão ficava aberta e
+        mantinha o arquivo travado (falhas de remoção no Windows).
+        """
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     def _update(self, job_id: str, **changes) -> None:
         changes["updated_at"] = datetime.now().isoformat()

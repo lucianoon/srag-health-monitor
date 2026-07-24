@@ -35,6 +35,7 @@ class AuditLogger:
 
         # Handler para arquivo JSON
         log_file = self.log_dir / f"audit_{datetime.now().strftime('%Y%m%d')}.jsonl"
+        self._file_handler: Optional[logging.FileHandler] = None
         if not any(
             isinstance(existing, logging.FileHandler)
             and Path(existing.baseFilename) == log_file
@@ -43,6 +44,7 @@ class AuditLogger:
             handler = logging.FileHandler(log_file)
             handler.setFormatter(logging.Formatter('%(message)s'))
             self.logger.addHandler(handler)
+            self._file_handler = handler
 
         # Handler para console
         if not any(
@@ -54,6 +56,17 @@ class AuditLogger:
                 logging.Formatter('%(asctime)s - AUDIT - %(message)s')
             )
             self.logger.addHandler(console_handler)
+
+    def close(self) -> None:
+        """Fecha e remove o handler de arquivo criado por esta instância.
+
+        Sem isso, o handler no logger global "audit" mantinha o arquivo de
+        log aberto indefinidamente (e travado, no Windows).
+        """
+        if self._file_handler is not None:
+            self.logger.removeHandler(self._file_handler)
+            self._file_handler.close()
+            self._file_handler = None
 
     def log_event(self, event_type: str, data: Dict[str, Any],
                   execution_id: Optional[str] = None):

@@ -33,6 +33,7 @@ class ReportWorker:
         execution_id = job.payload.get("execution_id") or new_execution_id()
         self.job_store.set_execution_id(job.job_id, execution_id)
 
+        audit_logger = None
         try:
             config = AppConfig.from_env(
                 model_name=job.payload.get("model"),
@@ -41,9 +42,10 @@ class ReportWorker:
             )
             config.ensure_runtime_dirs()
 
+            audit_logger = create_audit_logger(config.logs_dir)
             service = GenerateReportService(
                 config=config,
-                audit_logger=create_audit_logger(config.logs_dir),
+                audit_logger=audit_logger,
                 execution_tracker=ExecutionTracker(),
             )
             result = service.run(execution_id=execution_id)
@@ -52,6 +54,10 @@ class ReportWorker:
             self.job_store.mark_failed(job.job_id, str(exc))
             logger.exception("Job de relatório falhou: %s", job.job_id)
             return self.job_store.get(job.job_id)
+
+        finally:
+            if audit_logger is not None:
+                audit_logger.close()
 
         self.job_store.mark_succeeded(
             job.job_id,

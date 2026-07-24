@@ -306,9 +306,10 @@ def generate_report_sync(
     """Gera um relatório de SRAG de forma síncrona."""
     config = _build_config(request)
 
+    audit_logger = create_audit_logger(config.logs_dir)
     service = GenerateReportService(
         config=config,
-        audit_logger=create_audit_logger(config.logs_dir),
+        audit_logger=audit_logger,
         execution_tracker=ExecutionTracker(),
     )
 
@@ -316,6 +317,8 @@ def generate_report_sync(
         result = service.run()
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+    finally:
+        audit_logger.close()
 
     return GenerateReportResponse(
         execution_id=result.execution_id,
