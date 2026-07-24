@@ -314,6 +314,45 @@ make test
 make docker-config
 ```
 
+## Testes
+
+A suíte tem **89 testes**, todos offline e determinísticos: nenhum teste faz
+chamada de rede nem exige chaves de API (o fetch de notícias é desabilitado e
+a narrativa usa o fallback determinístico). Roda tanto com `unittest` (usado
+no CI) quanto com `pytest`:
+
+```bash
+# via unittest (mesmo comando do CI)
+make test
+# ou
+python -m unittest discover -s tests -p "test*.py"
+
+# via pytest
+python -m pytest tests/ -q
+```
+
+Os testes são organizados por módulo do código:
+
+```text
+tests/
+  conftest.py             # helpers compartilhados: banco SRAG temporário,
+                          # fábrica de AppConfig e guarda offline de notícias
+  test_database.py        # src/database/db_manager.py (métricas SQLite)
+  test_config.py          # src/config.py (AppConfig e feeds de notícias)
+  test_guardrails.py      # src/guardrails (validadores, LGPD, auditoria)
+  test_tools.py           # src/tools (banco, notícias RSS, gráficos)
+  test_pipeline.py        # blackboard + orquestrador e agentes do pipeline
+  test_report_service.py  # caso de uso de geração de relatório
+  test_data_ingestion.py  # ingestão do CSV oficial para o cache SQLite
+  test_job_store.py       # stores de jobs (memória e SQLite)
+  test_worker.py          # worker assíncrono, incluindo retry com retomada
+  test_api.py             # endpoints HTTP (jobs, retry, artifact, métricas)
+```
+
+Todo recurso aberto nos testes (conexões SQLite, handlers de log) é fechado
+de forma determinística via `addCleanup`, o que mantém a suíte verde também
+no Windows (arquivos travados impedem a limpeza de diretórios temporários).
+
 ## Dados
 
 O sistema espera um banco SQLite em `data/srag.db`. Se o banco não existir, o
