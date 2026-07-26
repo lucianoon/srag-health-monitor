@@ -1,39 +1,47 @@
 # SRAG Health Monitor
 
-Sistema para gerar relatórios epidemiológicos de SRAG a partir de dados
-DATASUS/SIVEP-Gripe, com API HTTP, execução assíncrona por worker, auditoria,
-guardrails e geração de gráficos.
+*[Versão em português](README.pt-BR.md)*
 
-## Visão Geral
+A system that generates epidemiological reports on SRAG from DATASUS/SIVEP-Gripe
+data, with an HTTP API, asynchronous execution by a worker, audit logging,
+guardrails and chart generation.
 
-O projeto evoluiu de uma PoC para uma base de produto operável:
+> **SRAG** (*Síndrome Respiratória Aguda Grave*) is Brazil's mandatory
+> notification category for severe acute respiratory infection — the WHO SARI
+> equivalent, not the 2003 SARS coronavirus. **SIVEP-Gripe** is the national
+> surveillance information system that collects it, published as open data by
+> **DATASUS**, the Brazilian Ministry of Health's IT department.
 
-- API FastAPI para criar e consultar jobs de relatório.
-- Worker separado para executar jobs pendentes.
-- Pipeline multiagente: ingestão SUS, análise epidemiológica e escrita de relatório.
-- Persistência de jobs em SQLite.
-- Banco SRAG em SQLite.
-- Relatórios Markdown e gráficos em `outputs/reports`.
-- Logs estruturados de auditoria em `outputs/logs`.
-- Docker Compose com serviços `api` e `worker`.
-- CI com testes, build Docker e smoke test de healthcheck.
+## Overview
 
-## Exemplo de Saída
+The project grew from a PoC into an operable product base:
 
-Cada execução do pipeline produz um relatório Markdown com métricas
-epidemiológicas, análise contextual, nível de risco e gráficos gerados
-a partir do banco:
+- FastAPI service to create and query report jobs.
+- Separate worker to execute pending jobs.
+- Multi-agent pipeline: SUS ingestion, epidemiological analysis and report writing.
+- Job persistence in SQLite.
+- SRAG database in SQLite.
+- Markdown reports and charts in `outputs/reports`.
+- Structured audit logs in `outputs/logs`.
+- Docker Compose with `api` and `worker` services.
+- CI with tests, a Docker build and a healthcheck smoke test.
 
-![Casos mensais de SRAG](docs/exemplo/casos_mensais.png)
+## Sample output
 
-Veja o [relatório completo de exemplo](docs/exemplo/relatorio_exemplo.md)
-(gerado com dados sintéticos e a narrativa determinística — o mesmo pipeline
-roda com dados reais do DATASUS e, opcionalmente, narrativa via LLM).
+Every pipeline run produces a Markdown report with epidemiological metrics,
+contextual analysis, a risk level and charts generated from the database:
 
-## Arquitetura
+![Monthly SRAG cases](docs/exemplo/casos_mensais.png)
+
+See the [full sample report](docs/exemplo/relatorio_exemplo.md) (generated with
+synthetic data and the deterministic narrative — the same pipeline runs against
+real DATASUS data and, optionally, an LLM-written narrative). The report itself
+is in Portuguese, since that is the language of the published surveillance data.
+
+## Architecture
 
 ```text
-Cliente/API Consumer
+Client / API consumer
         |
         v
 FastAPI (/reports, /reports/{job_id}, /reports/{job_id}/retry,
@@ -49,70 +57,70 @@ Worker
 GenerateReportService / Multi-Agent Orchestrator
         |
         v
-Blackboard de etapas (estado por execução em data/pipeline_state/)
+Step blackboard (per-run state in data/pipeline_state/)
         |
-        +--> collect_data  ─┐ (paralelo)  SUSDataIngestionAgent -> data/srag.db
-        +--> collect_news  ─┘             SUSDataIngestionAgent -> feeds RSS
-        +--> analyze                      EpidemiologyAnalysisAgent -> achados e risco
-        +--> generate_charts              ReportWriterAgent -> gráficos
+        +--> collect_data  ─┐ (parallel)  SUSDataIngestionAgent -> data/srag.db
+        +--> collect_news  ─┘             SUSDataIngestionAgent -> RSS feeds
+        +--> analyze                      EpidemiologyAnalysisAgent -> findings and risk
+        +--> generate_charts              ReportWriterAgent -> charts
         +--> write_report                 ReportWriterAgent -> Markdown
         +--> AuditLogger -> outputs/logs
 ```
 
-As etapas não se chamam entre si: cada uma declara pré-condições sobre o
-estado compartilhado e roda quando elas são satisfeitas (coordenação por
-blackboard). O progresso é persistido por etapa — reexecutar com o mesmo
-`execution_id` retoma do ponto da falha sem refazer o que já foi concluído.
+The steps never call each other: each one declares preconditions over the
+shared state and runs once they are satisfied (blackboard coordination).
+Progress is persisted per step — re-running with the same `execution_id`
+resumes from the point of failure without redoing completed work.
 
-## Estrutura
+## Layout
 
 ```text
 src/
   api/                 # FastAPI app
-  services/            # casos de uso, job store e worker
-  agents/              # orquestrador multiagente e agentes especializados
-  tools/               # banco, notícias e gráficos
-  database/            # gerenciador SQLite SRAG
-  guardrails/          # validações, LGPD e auditoria
-  utils/               # processamento DATASUS
-main.py                # CLI síncrono
-worker.py              # processo worker
+  services/            # use cases, job store and worker
+  agents/              # multi-agent orchestrator and specialized agents
+  tools/               # database, news and charts
+  database/            # SRAG SQLite manager
+  guardrails/          # validation, LGPD compliance and auditing
+  utils/               # DATASUS processing
+main.py                # synchronous CLI
+worker.py              # worker process
 Dockerfile
 docker-compose.yml
 Makefile
 ```
 
-## Requisitos
+## Requirements
 
 - Python 3.11+
-- Docker/Compose opcional para execução containerizada
-- `data/srag.db` para gerar relatórios reais
+- Docker/Compose, optional, for containerized execution
+- `data/srag.db` to generate real reports
 
-`OPENAI_API_KEY` é opcional: com a chave configurada, as seções narrativas do
-relatório (análise contextual e conclusões/recomendações) são escritas pelo
-LLM (`SRAG_MODEL`, default `gpt-4.1-mini`) a partir dos achados calculados
-deterministicamente; sem a chave — ou em caso de falha na chamada — o relatório
-cai no modo determinístico baseado em regras. O modo usado fica registrado na
-seção "Fonte e Rastreabilidade" de cada relatório.
+`OPENAI_API_KEY` is optional. With the key configured, the narrative sections of
+the report (contextual analysis and conclusions/recommendations) are written by
+the LLM (`SRAG_MODEL`, default `gpt-4.1-mini`) from findings that were computed
+deterministically; without the key — or if the call fails — the report falls
+back to the rule-based deterministic mode. Which mode was used is recorded in
+the "Fonte e Rastreabilidade" (source and traceability) section of every report.
 
-As métricas, achados e nível de risco são sempre calculados por código
-determinístico; o LLM escreve apenas a narrativa, com instruções de não
-inventar números e sem acesso a dados de pacientes. O texto gerado passa pelos
-mesmos guardrails de validação de conteúdo e anonimização de PII.
+Metrics, findings and risk level are **always** computed by deterministic code.
+The LLM only writes prose, under instructions never to invent numbers, and with
+no access to patient data. The generated text goes through the same content
+validation and PII anonymization guardrails.
 
-## Setup Local
+## Local setup
 
 ```bash
 make install
 ```
 
-Opcionalmente copie o arquivo de ambiente:
+Optionally copy the environment file:
 
 ```bash
 cp .env.example .env
 ```
 
-## Rodar Sem Docker
+## Running without Docker
 
 Terminal 1:
 
@@ -132,7 +140,7 @@ Healthcheck:
 make smoke
 ```
 
-Criar job:
+Create a job:
 
 ```bash
 curl -X POST http://localhost:8000/reports \
@@ -140,38 +148,38 @@ curl -X POST http://localhost:8000/reports \
   -d '{}'
 ```
 
-Consultar status:
+Query its status:
 
 ```bash
 curl http://localhost:8000/reports/<job_id>
 ```
 
-Ingerir dados oficiais do SUS/OpenDATASUS antes de gerar relatórios reais:
+Ingest official SUS/OpenDATASUS data before generating real reports:
 
 ```bash
 SRAG_SUS_DATA_URL="https://..." make ingest
 ```
 
-Para smoke test com amostra:
+For a smoke test on a sample:
 
 ```bash
 .venv/bin/python ingest.py --source-url "https://..." --nrows 1000
 ```
 
-Quando `SRAG_API_KEY` estiver configurada, envie o cabeçalho:
+When `SRAG_API_KEY` is configured, send the header:
 
 ```bash
 curl http://localhost:8000/reports \
   -H "X-API-Key: $SRAG_API_KEY"
 ```
 
-## Rodar Com Docker
+## Running with Docker
 
 ```bash
 make docker-up
 ```
 
-Parar:
+Stop:
 
 ```bash
 make docker-down
@@ -179,12 +187,12 @@ make docker-down
 
 ## API
 
-`GET /health` e `GET /ready` são públicos para healthchecks. Os demais
-endpoints exigem `X-API-Key` quando `SRAG_API_KEY` estiver configurada.
+`GET /health` and `GET /ready` are public, for healthchecks. Every other
+endpoint requires `X-API-Key` when `SRAG_API_KEY` is configured.
 
 ### `GET /health`
 
-Retorna status básico da API.
+Returns the basic API status.
 
 ```json
 {"status": "ok"}
@@ -192,23 +200,23 @@ Retorna status básico da API.
 
 ### `GET /ready`
 
-Retorna readiness operacional, incluindo acesso ao banco de jobs, diretórios
-graváveis e presença de `data/srag.db`.
+Returns operational readiness, including access to the jobs database, writable
+directories and the presence of `data/srag.db`.
 
 ### `GET /reports`
 
-Lista jobs recentes.
+Lists recent jobs.
 
 Query params:
 
-- `limit`: 1 a 100, default `20`
-- `status`: `queued`, `running`, `succeeded` ou `failed`
+- `limit`: 1 to 100, default `20`
+- `status`: `queued`, `running`, `succeeded` or `failed`
 
 ### `POST /reports`
 
-Cria um job assíncrono.
+Creates an asynchronous job.
 
-Payload opcional:
+Optional payload:
 
 ```json
 {
@@ -218,7 +226,7 @@ Payload opcional:
 }
 ```
 
-Resposta:
+Response:
 
 ```json
 {
@@ -230,9 +238,9 @@ Resposta:
 
 ### `GET /reports/{job_id}`
 
-Consulta status e resultado do job.
+Queries the job's status and result.
 
-Estados possíveis:
+Possible states:
 
 - `queued`
 - `running`
@@ -241,29 +249,30 @@ Estados possíveis:
 
 ### `POST /reports/{job_id}/retry`
 
-Recria um job **falho** reaproveitando o `execution_id` original. O pipeline
-retoma do ponto da falha usando o estado persistido por etapa no blackboard —
-etapas já concluídas (ex.: ingestão) não são refeitas.
+Recreates a **failed** job, reusing the original `execution_id`. The pipeline
+resumes from the point of failure using the per-step state persisted in the
+blackboard — steps that already completed (ingestion, for instance) are not
+redone.
 
-Retornos comuns:
+Common responses:
 
-- `202`: novo job criado (mesmo formato de `POST /reports`)
-- `409`: job não está em `failed`
-- `404`: job não encontrado
+- `202`: new job created (same format as `POST /reports`)
+- `409`: job is not in `failed`
+- `404`: job not found
 
 ### `GET /reports/{job_id}/artifact`
 
-Baixa o relatório Markdown gerado por um job concluído.
+Downloads the Markdown report generated by a completed job.
 
-Retornos comuns:
+Common responses:
 
-- `200`: relatório disponível
-- `409`: job ainda não concluído
-- `404`: job ou artefato não encontrado
+- `200`: report available
+- `409`: job not finished yet
+- `404`: job or artifact not found
 
 ### `GET /metrics`
 
-Retorna métricas operacionais simples:
+Returns simple operational metrics:
 
 ```json
 {
@@ -280,45 +289,45 @@ Retorna métricas operacionais simples:
 
 ### `POST /reports/sync`
 
-Executa geração síncrona. Útil para debug e integração interna.
+Runs generation synchronously. Useful for debugging and internal integration.
 
 ## CLI
 
-Ingestão de dados oficiais:
+Ingest official data:
 
 ```bash
 .venv/bin/python ingest.py --source-url "https://..."
 ```
 
-Geração síncrona via CLI:
+Generate a report synchronously:
 
 ```bash
 .venv/bin/python main.py --output-dir outputs/reports
 ```
 
-Processar no máximo um job pendente:
+Process at most one pending job:
 
 ```bash
 make worker-once
 ```
 
-## Variáveis De Ambiente
+## Environment variables
 
-| Variável | Default | Descrição |
+| Variable | Default | Description |
 | --- | --- | --- |
-| `OPENAI_API_KEY` | vazio | chave OpenAI opcional |
-| `SRAG_API_KEY` | vazio | chave opcional para proteger endpoints HTTP |
-| `SRAG_DATA_DIR` | `./data` | diretório de dados |
-| `SRAG_DB_PATH` | `./data/srag.db` | banco SRAG |
-| `SRAG_JOBS_DB_PATH` | `./data/jobs.db` | banco de jobs |
-| `SRAG_OUTPUT_DIR` | `./outputs/reports` | relatórios e gráficos |
-| `SRAG_LOG_DIR` | `./outputs/logs` | logs de auditoria |
-| `SRAG_MODEL` | `gpt-4.1-mini` | modelo configurado |
-| `SRAG_SUS_DATA_URL` | vazio | URL do recurso CSV SRAG no portal oficial |
-| `SRAG_SUS_INGEST_NROWS` | vazio | limite opcional de linhas para smoke tests |
-| `SRAG_NEWS_FEEDS` | vazio | JSON opcional para sobrescrever os feeds RSS de notícias |
+| `OPENAI_API_KEY` | empty | optional OpenAI key |
+| `SRAG_API_KEY` | empty | optional key to protect the HTTP endpoints |
+| `SRAG_DATA_DIR` | `./data` | data directory |
+| `SRAG_DB_PATH` | `./data/srag.db` | SRAG database |
+| `SRAG_JOBS_DB_PATH` | `./data/jobs.db` | jobs database |
+| `SRAG_OUTPUT_DIR` | `./outputs/reports` | reports and charts |
+| `SRAG_LOG_DIR` | `./outputs/logs` | audit logs |
+| `SRAG_MODEL` | `gpt-4.1-mini` | configured model |
+| `SRAG_SUS_DATA_URL` | empty | URL of the SRAG CSV resource on the official portal |
+| `SRAG_SUS_INGEST_NROWS` | empty | optional row limit for smoke tests |
+| `SRAG_NEWS_FEEDS` | empty | optional JSON overriding the RSS news feeds |
 
-## Validação
+## Validation
 
 ```bash
 make compile
@@ -326,90 +335,99 @@ make test
 make docker-config
 ```
 
-## Testes
+## Tests
 
-A suíte tem **89 testes**, todos offline e determinísticos: nenhum teste faz
-chamada de rede nem exige chaves de API (o fetch de notícias é desabilitado e
-a narrativa usa o fallback determinístico). Roda tanto com `unittest` (usado
-no CI) quanto com `pytest`:
+The suite has **89 tests**, all offline and deterministic: no test makes a
+network call or requires an API key (news fetching is disabled and the
+narrative uses the deterministic fallback). It runs under both `unittest`
+(used in CI) and `pytest`:
 
 ```bash
-# via unittest (mesmo comando do CI)
+# via unittest (the same command CI runs)
 make test
-# ou
+# or
 python -m unittest discover -s tests -p "test*.py"
 
 # via pytest
 python -m pytest tests/ -q
 ```
 
-Os testes são organizados por módulo do código:
+Tests are organized to mirror the source modules:
 
 ```text
 tests/
-  conftest.py             # helpers compartilhados: banco SRAG temporário,
-                          # fábrica de AppConfig e guarda offline de notícias
-  test_database.py        # src/database/db_manager.py (métricas SQLite)
-  test_config.py          # src/config.py (AppConfig e feeds de notícias)
-  test_guardrails.py      # src/guardrails (validadores, LGPD, auditoria)
-  test_tools.py           # src/tools (banco, notícias RSS, gráficos)
-  test_pipeline.py        # blackboard + orquestrador e agentes do pipeline
-  test_report_service.py  # caso de uso de geração de relatório
-  test_data_ingestion.py  # ingestão do CSV oficial para o cache SQLite
-  test_job_store.py       # stores de jobs (memória e SQLite)
-  test_worker.py          # worker assíncrono, incluindo retry com retomada
-  test_api.py             # endpoints HTTP (jobs, retry, artifact, métricas)
+  conftest.py             # shared helpers: temporary SRAG database,
+                          # AppConfig factory and the offline news guard
+  test_database.py        # src/database/db_manager.py (SQLite metrics)
+  test_config.py          # src/config.py (AppConfig and news feeds)
+  test_guardrails.py      # src/guardrails (validators, LGPD, auditing)
+  test_tools.py           # src/tools (database, RSS news, charts)
+  test_pipeline.py        # blackboard + orchestrator and pipeline agents
+  test_report_service.py  # report generation use case
+  test_data_ingestion.py  # official CSV ingestion into the SQLite cache
+  test_job_store.py       # job stores (in-memory and SQLite)
+  test_worker.py          # async worker, including retry with resumption
+  test_api.py             # HTTP endpoints (jobs, retry, artifact, metrics)
 ```
 
-Todo recurso aberto nos testes (conexões SQLite, handlers de log) é fechado
-de forma determinística via `addCleanup`, o que mantém a suíte verde também
-no Windows (arquivos travados impedem a limpeza de diretórios temporários).
+Every resource opened in the tests (SQLite connections, log handlers) is closed
+deterministically via `addCleanup`, which keeps the suite green on Windows too
+— locked files there prevent temporary directories from being cleaned up.
 
-## Dados
+## Data
 
-O sistema espera um banco SQLite em `data/srag.db`. Se o banco não existir, o
-job falha explicitamente com status `failed`. Gere esse cache com `make ingest`
-apontando `SRAG_SUS_DATA_URL` para o recurso CSV publicado no portal oficial.
+The system expects a SQLite database at `data/srag.db`. If it does not exist,
+the job fails explicitly with status `failed`. Build that cache with
+`make ingest`, pointing `SRAG_SUS_DATA_URL` at the CSV resource published on
+the official portal.
 
-Dados brutos e processados do DATASUS não são versionados no repositório.
+Raw and processed DATASUS data are not versioned in this repository.
 
-Fonte de referência:
+Reference sources:
 
 - OpenDATASUS/SIVEP-Gripe: https://opendatasus.saude.gov.br/dataset/srag-2021-a-2024
-- Portal atual de dados abertos do SUS: https://dadosabertos.saude.gov.br
+- Current SUS open data portal: https://dadosabertos.saude.gov.br
 
-## Notícias
+## News
 
-As notícias dos relatórios são obtidas em tempo de execução de feeds RSS de
-fontes reconhecidas em vigilância epidemiológica no Brasil:
+Report news items are fetched at runtime from the RSS feeds of organizations
+recognized in Brazilian epidemiological surveillance:
 
-- Agência Fiocruz de Notícias (inclui os boletins InfoGripe): `https://agencia.fiocruz.br/rss.xml`
-- Agência Brasil / EBC — editoria de Saúde: `https://agenciabrasil.ebc.com.br/rss/saude/feed.xml`
+- Agência Fiocruz de Notícias (includes the InfoGripe bulletins): `https://agencia.fiocruz.br/rss.xml`
+- Agência Brasil / EBC — health desk: `https://agenciabrasil.ebc.com.br/rss/saude/feed.xml`
 
-Os itens são ordenados por relevância ao tema de SRAG/vírus respiratórios e por
-data. Em caso de falha de rede ou parsing, a busca degrada para uma lista vazia
-— o sistema nunca fabrica notícias nem estatísticas.
+Items are ranked by relevance to SRAG/respiratory viruses and by date. On a
+network or parsing failure, the search degrades to an empty list — the system
+never fabricates news or statistics.
 
-Os feeds podem ser sobrescritos pela variável `SRAG_NEWS_FEEDS` (JSON), por
-exemplo:
+The feeds can be overridden through the `SRAG_NEWS_FEEDS` variable (JSON), for
+example:
 
 ```bash
 SRAG_NEWS_FEEDS='[{"name":"Agência Fiocruz","url":"https://agencia.fiocruz.br/rss.xml"}]'
 ```
 
-## Governança
+## Governance
 
-- Logs estruturados em JSONL.
-- Validação de entrada para consultas e períodos.
-- Validação de conteúdo do relatório.
-- Detecção e anonimização de PII em texto gerado.
-- Rastreamento de erros e status por job.
-- Métricas operacionais por status de job.
-- Separação entre ingestão de dados, análise epidemiológica e narrativa.
+- Structured JSONL logs.
+- Input validation for queries and time ranges.
+- Report content validation.
+- PII detection and anonymization in generated text.
+- Error and status tracking per job.
+- Operational metrics by job status.
+- Separation between data ingestion, epidemiological analysis and narrative.
 
-## Documentação
+LGPD is Brazil's general data protection law, broadly equivalent to the GDPR.
 
-- [Runbook operacional](docs/runbook.md)
-- [Plano de productização](docs/productization_plan.md)
-- [Informações DATASUS](docs/datasus_info.md)
-- [Diagrama de arquitetura](docs/architecture_diagram.mmd)
+## Documentation
+
+The documents below are in Portuguese.
+
+- [Operational runbook](docs/runbook.md)
+- [Productization plan](docs/productization_plan.md)
+- [DATASUS reference](docs/datasus_info.md)
+- [Architecture diagram](docs/architecture_diagram.mmd)
+
+## License
+
+MIT
