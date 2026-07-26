@@ -2,9 +2,17 @@
 
 *[English version](README.en.md)*
 
+[![CI](https://github.com/lucianoon/srag-health-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/lucianoon/srag-health-monitor/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-API-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-green.svg)](LICENSE)
+
 Sistema para gerar relatórios epidemiológicos de SRAG a partir de dados
 DATASUS/SIVEP-Gripe, com API HTTP, execução assíncrona por worker, auditoria,
 guardrails e geração de gráficos.
+
+**[Ver relatório de exemplo](docs/exemplo/relatorio_exemplo.md)** ·
+**[Ver gráfico gerado](docs/exemplo/casos_mensais.png)**
 
 ## Visão Geral
 

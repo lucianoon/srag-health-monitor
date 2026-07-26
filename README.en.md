@@ -2,9 +2,17 @@
 
 *[Versão em português](README.md)*
 
+[![CI](https://github.com/lucianoon/srag-health-monitor/actions/workflows/ci.yml/badge.svg)](https://github.com/lucianoon/srag-health-monitor/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-API-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
 A system that generates epidemiological reports on SRAG from DATASUS/SIVEP-Gripe
 data, with an HTTP API, asynchronous execution by a worker, audit logging,
 guardrails and chart generation.
+
+**[View example report](docs/exemplo/relatorio_exemplo.md)** ·
+**[View generated chart](docs/exemplo/casos_mensais.png)**
 
 > **SRAG** (*Síndrome Respiratória Aguda Grave*) is Brazil's mandatory
 > notification category for severe acute respiratory infection — the WHO SARI
