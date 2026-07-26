@@ -14,6 +14,17 @@ guardrails e geração de gráficos.
 **[Ver relatório de exemplo](docs/exemplo/relatorio_exemplo.md)** ·
 **[Ver gráfico gerado](docs/exemplo/casos_mensais.png)**
 
+## Evidências rápidas
+
+| Evidência | O que demonstra |
+|---|---|
+| 89 testes offline | Pipeline, API, worker, retry, guardrails e ingestão |
+| Dados DATASUS/SIVEP-Gripe | Aplicação em um domínio público brasileiro real |
+| Jobs retomáveis por etapa | Resiliência sem repetir trabalho concluído |
+| Relatório e gráfico versionados | Saída verificável antes de instalar o projeto |
+| Auditoria, anonimização de PII e validações | Segurança e governança explícitas |
+| API + worker em Docker Compose | Separação operacional dos serviços |
+
 ## Visão Geral
 
 O projeto evoluiu de uma PoC para uma base de produto operável:
