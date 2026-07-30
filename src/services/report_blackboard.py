@@ -9,14 +9,13 @@ da falha, sem refazer etapas concluídas.
 Contrato: os artefatos trocados entre etapas devem ser serializáveis em JSON.
 """
 
+import json
+import logging
+from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Sequence
-import json
-import logging
-
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +53,7 @@ class StepExecutionError(RuntimeError):
 class ReportBlackboard:
     """Executa etapas guiadas pelo estado, com persistência opcional em JSON."""
 
-    def __init__(self, steps: List[Step], state_path: Optional[Path] = None):
+    def __init__(self, steps: list[Step], state_path: Path | None = None):
         names = [step.name for step in steps]
         if len(names) != len(set(names)):
             raise ValueError("Etapas com nomes duplicados no blackboard.")
@@ -64,12 +63,12 @@ class ReportBlackboard:
 
         self.steps = {step.name: step for step in steps}
         self.state_path = state_path
-        self.status: Dict[str, StepStatus] = {name: StepStatus.PENDING for name in names}
+        self.status: dict[str, StepStatus] = dict.fromkeys(names, StepStatus.PENDING)
         self.artifacts: dict = {}
         self._load_state()
 
     @property
-    def ready_steps(self) -> List[Step]:
+    def ready_steps(self) -> list[Step]:
         """Etapas pendentes com todas as pré-condições DONE."""
         return [
             step

@@ -3,13 +3,13 @@
 import unittest
 from pathlib import Path
 
+from guardrails.audit_logger import AuditLogger, ExecutionTracker
+from services.report_service import GenerateReportService
 from tests.conftest import (  # também garante src/ no sys.path
     TempSRAGDatabaseMixin,
     make_app_config,
     offline_news_guard,
 )
-from guardrails.audit_logger import AuditLogger, ExecutionTracker
-from services.report_service import GenerateReportService
 
 # Mantém o módulo offline: o serviço executa o pipeline completo, incluindo
 # a coleta de notícias.

@@ -1,10 +1,9 @@
 """Agente de análise epidemiológica de SRAG."""
 
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
 
 from agents.data_ingestion_agent import DataSnapshot
-
 
 logger = logging.getLogger(__name__)
 

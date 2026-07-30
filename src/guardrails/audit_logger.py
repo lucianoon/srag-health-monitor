@@ -7,10 +7,10 @@ todas as decisões e operações do agente.
 
 import json
 import logging
-from datetime import datetime
-from typing import Dict, Any, Optional, Union
-from pathlib import Path
 import uuid
+from datetime import datetime
+from pathlib import Path
+from typing import Any
 
 from config import AppConfig
 
@@ -18,7 +18,7 @@ from config import AppConfig
 class AuditLogger:
     """Logger de auditoria para rastreamento de operações."""
 
-    def __init__(self, log_dir: Optional[Union[str, Path]] = None):
+    def __init__(self, log_dir: str | Path | None = None):
         """
         Inicializa o audit logger.
 
@@ -35,7 +35,7 @@ class AuditLogger:
 
         # Handler para arquivo JSON
         log_file = self.log_dir / f"audit_{datetime.now().strftime('%Y%m%d')}.jsonl"
-        self._file_handler: Optional[logging.FileHandler] = None
+        self._file_handler: logging.FileHandler | None = None
         if not any(
             isinstance(existing, logging.FileHandler)
             and Path(existing.baseFilename) == log_file
@@ -68,8 +68,8 @@ class AuditLogger:
             self._file_handler.close()
             self._file_handler = None
 
-    def log_event(self, event_type: str, data: Dict[str, Any],
-                  execution_id: Optional[str] = None):
+    def log_event(self, event_type: str, data: dict[str, Any],
+                  execution_id: str | None = None):
         """
         Registra um evento de auditoria.
 
@@ -89,7 +89,7 @@ class AuditLogger:
         self.logger.info(json.dumps(event, ensure_ascii=False))
 
     def log_agent_decision(self, decision: str, reasoning: str,
-                           execution_id: str, metadata: Optional[Dict] = None):
+                           execution_id: str, metadata: dict | None = None):
         """
         Registra uma decisão do agente.
 
@@ -107,7 +107,7 @@ class AuditLogger:
 
         self.log_event("agent_decision", data, execution_id)
 
-    def log_tool_call(self, tool_name: str, inputs: Dict, outputs: Dict,
+    def log_tool_call(self, tool_name: str, inputs: dict, outputs: dict,
                       execution_id: str, duration_ms: float):
         """
         Registra uma chamada de ferramenta.
@@ -148,7 +148,7 @@ class AuditLogger:
         self.log_event("validation", data, execution_id)
 
     def log_error(self, error_type: str, error_message: str,
-                  execution_id: str, stack_trace: Optional[str] = None):
+                  execution_id: str, stack_trace: str | None = None):
         """
         Registra um erro.
 
@@ -166,7 +166,7 @@ class AuditLogger:
 
         self.log_event("error", data, execution_id)
 
-    def log_report_generation(self, execution_id: str, metrics: Dict,
+    def log_report_generation(self, execution_id: str, metrics: dict,
                               news_count: int, charts_generated: int,
                               report_path: str, duration_ms: float):
         """
@@ -198,7 +198,7 @@ class ExecutionTracker:
         """Inicializa o tracker."""
         self.executions = {}
 
-    def start_execution(self, execution_id: str) -> Dict[str, Any]:
+    def start_execution(self, execution_id: str) -> dict[str, Any]:
         """
         Inicia o rastreamento de uma execução.
 
@@ -265,7 +265,7 @@ class ExecutionTracker:
                 "timestamp": datetime.now().isoformat()
             })
 
-    def end_execution(self, execution_id: str) -> Dict[str, Any]:
+    def end_execution(self, execution_id: str) -> dict[str, Any]:
         """
         Finaliza o rastreamento de uma execução.
 
@@ -297,7 +297,7 @@ class ExecutionTracker:
         return summary
 
 
-def create_audit_logger(log_dir: Optional[Union[str, Path]] = None) -> AuditLogger:
+def create_audit_logger(log_dir: str | Path | None = None) -> AuditLogger:
     """Cria logger de auditoria apontando para o diretório configurado."""
     return AuditLogger(log_dir=log_dir)
 

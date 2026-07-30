@@ -11,10 +11,10 @@ satisfeitas. Consequências práticas:
   um novo observador, sem tocar nas demais.
 """
 
+import logging
 from dataclasses import asdict
 from datetime import datetime
-import logging
-from typing import List, Optional
+from typing import Any
 
 from agents.data_ingestion_agent import DataSnapshot, SUSDataIngestionAgent
 from agents.epidemiology_analysis_agent import (
@@ -24,7 +24,6 @@ from agents.epidemiology_analysis_agent import (
 from agents.report_writer_agent import ReportWriterAgent
 from config import AppConfig
 from services.report_blackboard import ReportBlackboard, Step
-
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +38,8 @@ class SRAGMultiAgentReportOrchestrator:
 
     def __init__(
         self,
-        config: Optional[AppConfig] = None,
-        execution_id: Optional[str] = None,
+        config: AppConfig | None = None,
+        execution_id: str | None = None,
     ):
         self.config = config or AppConfig.from_env()
         self.config.ensure_runtime_dirs()
@@ -55,12 +54,12 @@ class SRAGMultiAgentReportOrchestrator:
         self.analysis_agent = EpidemiologyAnalysisAgent()
         self.writer_agent = ReportWriterAgent(self.config)
 
-        self.last_metrics = {}
-        self.last_daily_cases = {}
-        self.last_monthly_cases = {}
-        self.last_news = {}
-        self.last_charts = {}
-        self.last_source = {}
+        self.last_metrics: dict[str, Any] = {}
+        self.last_daily_cases: dict[str, Any] = {}
+        self.last_monthly_cases: dict[str, Any] = {}
+        self.last_news: dict[str, Any] = {}
+        self.last_charts: dict[str, Any] = {}
+        self.last_source: dict[str, Any] = {}
         self.last_analysis = None
         self.last_narrative_mode = "deterministica"
 
@@ -86,7 +85,7 @@ class SRAGMultiAgentReportOrchestrator:
         logger.info("Relatório salvo em: %s", self.report_path)
         return artifacts["report"]
 
-    def _build_steps(self) -> List[Step]:
+    def _build_steps(self) -> list[Step]:
         return [
             Step(name="collect_data", run=self._collect_data),
             Step(name="collect_news", run=self._collect_news),

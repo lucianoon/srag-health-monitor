@@ -5,10 +5,9 @@ Este módulo implementa validações em múltiplas camadas para garantir
 a qualidade e segurança dos dados e operações.
 """
 
-from typing import Dict, Any, List, Tuple
+import logging
 import re
 from datetime import datetime
-import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -18,7 +17,7 @@ class InputValidator:
     """Validador de entradas do sistema."""
 
     @staticmethod
-    def validate_query_type(query_type: str) -> Tuple[bool, str]:
+    def validate_query_type(query_type: str) -> tuple[bool, str]:
         """
         Valida tipo de consulta ao banco de dados.
 
@@ -36,7 +35,7 @@ class InputValidator:
         return True, "OK"
 
     @staticmethod
-    def validate_days_parameter(days: int) -> Tuple[bool, str]:
+    def validate_days_parameter(days: int) -> tuple[bool, str]:
         """
         Valida parâmetro de dias.
 
@@ -58,7 +57,7 @@ class InputValidator:
         return True, "OK"
 
     @staticmethod
-    def validate_months_parameter(months: int) -> Tuple[bool, str]:
+    def validate_months_parameter(months: int) -> tuple[bool, str]:
         """
         Valida parâmetro de meses.
 
@@ -104,7 +103,7 @@ class OutputValidator:
     """Validador de saídas do sistema."""
 
     @staticmethod
-    def validate_metrics(metrics: Dict[str, float]) -> Tuple[bool, str]:
+    def validate_metrics(metrics: dict[str, float]) -> tuple[bool, str]:
         """
         Valida métricas calculadas.
 
@@ -138,7 +137,7 @@ class OutputValidator:
         return True, "OK"
 
     @staticmethod
-    def validate_report_content(report: str) -> Tuple[bool, str]:
+    def validate_report_content(report: str) -> tuple[bool, str]:
         """
         Valida conteúdo do relatório gerado.
 
@@ -172,7 +171,7 @@ class DataPrivacyGuard:
     EMAIL_PATTERN = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
 
     @staticmethod
-    def check_for_pii(text: str) -> Tuple[bool, List[str]]:
+    def check_for_pii(text: str) -> tuple[bool, list[str]]:
         """
         Verifica presença de informações pessoais identificáveis (PII).
 
@@ -241,9 +240,9 @@ class RateLimiter:
             max_calls_per_minute: Máximo de chamadas por minuto
         """
         self.max_calls = max_calls_per_minute
-        self.calls = []
+        self.calls: list[datetime] = []
 
-    def check_rate_limit(self) -> Tuple[bool, str]:
+    def check_rate_limit(self) -> tuple[bool, str]:
         """
         Verifica se a taxa de chamadas está dentro do limite.
 

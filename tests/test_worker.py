@@ -5,14 +5,14 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from tests.conftest import (  # também garante src/ no sys.path
-    TempSRAGDatabaseMixin,
-    offline_news_guard,
-)
 from agents.data_ingestion_agent import SUSDataIngestionAgent
 from agents.report_writer_agent import ReportWriterAgent
 from services.job_store import JobStatus, SQLiteJobStore
 from services.report_worker import ReportWorker
+from tests.conftest import (  # também garante src/ no sys.path
+    TempSRAGDatabaseMixin,
+    offline_news_guard,
+)
 
 # Mantém o módulo offline: o worker executa o pipeline completo, incluindo
 # a coleta de notícias.

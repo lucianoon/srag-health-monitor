@@ -5,21 +5,19 @@ Este módulo concentra caminhos e opções de runtime para evitar acoplamento a
 um ambiente específico. Variáveis de ambiente continuam tendo precedência.
 """
 
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import List, Optional, Union
-from urllib.parse import urlparse
 import json
 import logging
 import os
-
+from dataclasses import dataclass, field
+from pathlib import Path
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
 
 # Feeds oficiais/reconhecidos em vigilância epidemiológica no Brasil.
 # Agência Fiocruz carrega os boletins InfoGripe (referência nacional de SRAG).
-DEFAULT_NEWS_FEEDS: List[dict] = [
+DEFAULT_NEWS_FEEDS: list[dict] = [
     {"name": "Agência Fiocruz de Notícias", "url": "https://agencia.fiocruz.br/rss.xml"},
     {
         "name": "Agência Brasil - Saúde",
@@ -28,7 +26,7 @@ DEFAULT_NEWS_FEEDS: List[dict] = [
 ]
 
 
-def _parse_news_feeds(raw: Optional[str]) -> List[dict]:
+def _parse_news_feeds(raw: str | None) -> list[dict]:
     """Interpreta SRAG_NEWS_FEEDS; volta ao default se ausente ou inválido.
 
     Aceita um JSON: lista de objetos {"name", "url"} ou lista de URLs (string).
@@ -42,7 +40,7 @@ def _parse_news_feeds(raw: Optional[str]) -> List[dict]:
         logger.warning("SRAG_NEWS_FEEDS inválido (JSON); usando feeds padrão")
         return [dict(feed) for feed in DEFAULT_NEWS_FEEDS]
 
-    feeds: List[dict] = []
+    feeds: list[dict] = []
     for entry in parsed if isinstance(parsed, list) else []:
         if isinstance(entry, str):
             url = entry.strip()
@@ -69,21 +67,21 @@ class AppConfig:
     reports_dir: Path
     logs_dir: Path
     model_name: str
-    openai_api_key: Optional[str]
-    api_key: Optional[str] = None
-    sus_data_url: Optional[str] = None
-    sus_ingest_nrows: Optional[int] = None
-    news_feeds: List[dict] = field(default_factory=lambda: [dict(f) for f in DEFAULT_NEWS_FEEDS])
+    openai_api_key: str | None
+    api_key: str | None = None
+    sus_data_url: str | None = None
+    sus_ingest_nrows: int | None = None
+    news_feeds: list[dict] = field(default_factory=lambda: [dict(f) for f in DEFAULT_NEWS_FEEDS])
 
     @classmethod
     def from_env(
         cls,
         *,
-        model_name: Optional[str] = None,
-        output_dir: Optional[Union[str, Path]] = None,
-        db_path: Optional[Union[str, Path]] = None,
-        jobs_db_path: Optional[Union[str, Path]] = None,
-        log_dir: Optional[Union[str, Path]] = None,
+        model_name: str | None = None,
+        output_dir: str | Path | None = None,
+        db_path: str | Path | None = None,
+        jobs_db_path: str | Path | None = None,
+        log_dir: str | Path | None = None,
     ) -> "AppConfig":
         """Cria configuração a partir de defaults e variáveis de ambiente."""
         project_root = Path(__file__).resolve().parents[1]
@@ -117,7 +115,7 @@ class AppConfig:
             jobs_db_path=resolved_jobs_db_path,
             reports_dir=reports_dir,
             logs_dir=logs_dir,
-            model_name=model_name or os.getenv("SRAG_MODEL", "gpt-4.1-mini"),
+            model_name=model_name or os.getenv("SRAG_MODEL") or "gpt-4.1-mini",
             openai_api_key=os.getenv("OPENAI_API_KEY"),
             api_key=os.getenv("SRAG_API_KEY"),
             sus_data_url=os.getenv("SRAG_SUS_DATA_URL"),
@@ -134,7 +132,7 @@ class AppConfig:
         self.logs_dir.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
-    def _optional_int(value: Optional[str]) -> Optional[int]:
+    def _optional_int(value: str | None) -> int | None:
         if value in (None, ""):
             return None
         return int(value)

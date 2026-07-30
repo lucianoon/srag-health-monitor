@@ -2,7 +2,6 @@
 
 import logging
 from time import sleep
-from typing import Optional
 
 from agents.report_pipeline import new_execution_id
 from config import AppConfig
@@ -20,7 +19,7 @@ class ReportWorker:
         self.job_store = job_store
         self.poll_interval_seconds = poll_interval_seconds
 
-    def run_once(self) -> Optional[ReportJob]:
+    def run_once(self) -> ReportJob | None:
         """Executa um único job pendente, se existir."""
         job = self.job_store.claim_next()
         if job is None:

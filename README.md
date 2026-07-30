@@ -351,18 +351,21 @@ make docker-config
 
 A suíte tem **89 testes**, todos offline e determinísticos: nenhum teste faz
 chamada de rede nem exige chaves de API (o fetch de notícias é desabilitado e
-a narrativa usa o fallback determinístico). Roda tanto com `unittest` (usado
-no CI) quanto com `pytest`:
+a narrativa usa o fallback determinístico). Roda tanto com `pytest` (usado
+no CI) quanto com `unittest`:
 
 ```bash
-# via unittest (mesmo comando do CI)
+# via pytest (mesmo comando do CI)
 make test
 # ou
-python -m unittest discover -s tests -p "test*.py"
+pytest -q
 
-# via pytest
-python -m pytest tests/ -q
+# via unittest — o -t . é necessário para que tests/__init__.py rode e
+# coloque src/ no sys.path antes dos módulos de teste
+python -m unittest discover -t . -s tests -p "test*.py"
 ```
+
+Os mesmos gates do CI: `ruff check .`, `mypy` e `pytest -q` (ou `make check`).
 
 Os testes são organizados por módulo do código:
 

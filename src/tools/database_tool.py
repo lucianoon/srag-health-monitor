@@ -4,14 +4,16 @@ Ferramenta de consulta ao banco de dados para o agente de IA.
 Esta ferramenta permite que o agente consulte métricas e dados do banco de SRAG.
 """
 
+import os
+import sys
+from pathlib import Path
+from typing import Any
+
+from langchain.tools import BaseTool
+from pydantic import BaseModel, Field
+
 from database.db_manager import SRAGDatabase
 from guardrails.validators import InputValidator
-from langchain.tools import BaseTool
-from typing import Dict, Any, Optional
-from pydantic import BaseModel, Field
-from pathlib import Path
-import sys
-import os
 
 # Adicionar path do projeto
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -23,11 +25,11 @@ class DatabaseQueryInput(BaseModel):
         description="Tipo de consulta: 'metrics' para métricas principais, "
                     "'daily_cases' para casos diários, 'monthly_cases' para casos mensais"
     )
-    days: Optional[int] = Field(
+    days: int | None = Field(
         default=30,
         description="Número de dias para consultas temporais (padrão: 30)"
     )
-    months: Optional[int] = Field(
+    months: int | None = Field(
         default=12,
         description="Número de meses para consultas mensais (padrão: 12)"
     )
@@ -52,7 +54,7 @@ class DatabaseQueryTool(BaseTool):
         ))
     )
 
-    def _run(self, query_type: str, days: int = 30, months: int = 12) -> Dict[str, Any]:
+    def _run(self, query_type: str, days: int = 30, months: int = 12) -> dict[str, Any]:
         """
         Executa a consulta ao banco de dados.
 
@@ -120,13 +122,13 @@ class DatabaseQueryTool(BaseTool):
 
         return result
 
-    async def _arun(self, query_type: str, days: int = 30, months: int = 12) -> Dict[str, Any]:
+    async def _arun(self, query_type: str, days: int = 30, months: int = 12) -> dict[str, Any]:
         """Versão assíncrona (não implementada)."""
         raise NotImplementedError("Versão assíncrona não implementada")
 
 
 # Função auxiliar para criar a ferramenta
-def create_database_tool(db_path: Optional[str] = None) -> DatabaseQueryTool:
+def create_database_tool(db_path: str | None = None) -> DatabaseQueryTool:
     """Cria e retorna uma instância da ferramenta de banco de dados."""
     return DatabaseQueryTool(db_path=db_path) if db_path else DatabaseQueryTool()
 

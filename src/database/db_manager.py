@@ -7,12 +7,12 @@ Este módulo é responsável por:
 - Fornecer interface para consultas
 """
 
-import sqlite3
-import pandas as pd
-from typing import Dict, List, Optional, Tuple
-from datetime import datetime, timedelta
 import logging
+import sqlite3
+from datetime import datetime, timedelta
 from pathlib import Path
+
+import pandas as pd
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -29,7 +29,19 @@ class SRAGDatabase:
             db_path: Caminho para o arquivo do banco de dados SQLite
         """
         self.db_path = db_path
-        self.conn = None
+        self.conn: sqlite3.Connection | None = None
+
+    def _require_conn(self) -> sqlite3.Connection:
+        """Devolve a conexão aberta, ou falha com um erro explícito.
+
+        Sem isto, usar o gerenciador antes de `connect()` estoura um
+        ``AttributeError`` em ``None`` no meio de uma query.
+        """
+        if self.conn is None:
+            raise RuntimeError(
+                "Banco de dados não conectado: chame connect() antes de consultar."
+            )
+        return self.conn
 
     def connect(self):
         """Estabelece conexão com o banco de dados."""
@@ -48,7 +60,7 @@ class SRAGDatabase:
         """Cria as tabelas do banco de dados."""
         logger.info("Criando tabelas do banco de dados")
 
-        cursor = self.conn.cursor()
+        cursor = self._require_conn().cursor()
 
         # Tabela principal de casos de SRAG
         cursor.execute("""
@@ -86,7 +98,7 @@ class SRAGDatabase:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_obito ON casos_srag(obito)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_uti ON casos_srag(internou_uti)")
 
-        self.conn.commit()
+        self._require_conn().commit()
         logger.info("Tabelas criadas com sucesso")
 
     def load_data_from_csv(self, csv_path: str):
@@ -134,14 +146,14 @@ class SRAGDatabase:
 
     def clear_cases(self):
         """Remove casos existentes para permitir cargas idempotentes."""
-        cursor = self.conn.cursor()
+        cursor = self._require_conn().cursor()
         cursor.execute("DELETE FROM casos_srag")
-        self.conn.commit()
+        self._require_conn().commit()
         logger.info("Casos SRAG existentes removidos do banco")
 
     def get_total_cases(self) -> int:
         """Retorna o total de casos registrados."""
-        cursor = self.conn.cursor()
+        cursor = self._require_conn().cursor()
         cursor.execute("SELECT COUNT(*) FROM casos_srag")
         return cursor.fetchone()[0]
 
@@ -152,7 +164,7 @@ class SRAGDatabase:
         Returns:
             Taxa de mortalidade em percentual
         """
-        cursor = self.conn.cursor()
+        cursor = self._require_conn().cursor()
         cursor.execute("""
             SELECT
                 COUNT(*) as total,
@@ -174,7 +186,7 @@ class SRAGDatabase:
         Returns:
             Taxa de ocupação de UTI em percentual
         """
-        cursor = self.conn.cursor()
+        cursor = self._require_conn().cursor()
         cursor.execute("""
             SELECT
                 COUNT(*) as total,
@@ -196,7 +208,7 @@ class SRAGDatabase:
         Returns:
             Taxa de vacinação em percentual
         """
-        cursor = self.conn.cursor()
+        cursor = self._require_conn().cursor()
         cursor.execute("""
             SELECT
                 COUNT(*) as total,
@@ -221,7 +233,7 @@ class SRAGDatabase:
         Returns:
             Taxa de crescimento em percentual
         """
-        cursor = self.conn.cursor()
+        cursor = self._require_conn().cursor()
 
         # Obter data máxima
         cursor.execute("SELECT MAX(dt_notific) FROM casos_srag")
@@ -254,7 +266,7 @@ class SRAGDatabase:
 
         return ((current_cases - previous_cases) / previous_cases) * 100
 
-    def get_daily_cases(self, last_n_days: int = 30) -> List[Tuple[str, int]]:
+    def get_daily_cases(self, last_n_days: int = 30) -> list[tuple[str, int]]:
         """
         Retorna casos diários dos últimos N dias.
 
@@ -264,7 +276,7 @@ class SRAGDatabase:
         Returns:
             Lista de tuplas (data, número_de_casos)
         """
-        cursor = self.conn.cursor()
+        cursor = self._require_conn().cursor()
 
         # Obter data máxima
         cursor.execute("SELECT MAX(dt_notific) FROM casos_srag")
@@ -287,7 +299,7 @@ class SRAGDatabase:
 
         return cursor.fetchall()
 
-    def get_monthly_cases(self, last_n_months: int = 12) -> List[Tuple[str, int]]:
+    def get_monthly_cases(self, last_n_months: int = 12) -> list[tuple[str, int]]:
         """
         Retorna casos mensais dos últimos N meses.
 
@@ -297,7 +309,7 @@ class SRAGDatabase:
         Returns:
             Lista de tuplas (ano-mês, número_de_casos)
         """
-        cursor = self.conn.cursor()
+        cursor = self._require_conn().cursor()
 
         cursor.execute("""
             SELECT
@@ -312,7 +324,7 @@ class SRAGDatabase:
         results = cursor.fetchall()
         return list(reversed(results))  # Ordem cronológica
 
-    def get_all_metrics(self) -> Dict[str, float]:
+    def get_all_metrics(self) -> dict[str, float]:
         """
         Retorna todas as métricas principais.
 

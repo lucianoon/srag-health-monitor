@@ -4,21 +4,22 @@ Ferramenta de geração de gráficos para o agente de IA.
 Esta ferramenta permite que o agente gere gráficos de visualização de dados.
 """
 
-from langchain.tools import BaseTool
-from typing import Dict, Any, List, Optional
-from pydantic import BaseModel, Field
+from typing import Any
+
 import matplotlib
+from langchain.tools import BaseTool
+from pydantic import BaseModel, Field
 
 # Backend não-interativo: a etapa de gráficos roda fora da main thread no
 # blackboard do pipeline, e backends interativos não suportam isso.
 matplotlib.use("Agg")
 
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
-from datetime import datetime
-from pathlib import Path
-import os
 import logging
+import os
+from datetime import datetime
+
+import matplotlib.dates as mdates
+import matplotlib.pyplot as plt
 
 from config import AppConfig
 
@@ -52,7 +53,7 @@ class ChartGenerationTool(BaseTool):
     )
     args_schema: type[BaseModel] = ChartGenerationInput
 
-    def _generate_daily_chart(self, data: List[Dict], output_path: str) -> str:
+    def _generate_daily_chart(self, data: list[dict], output_path: str) -> str:
         """
         Gera gráfico de casos diários.
 
@@ -67,7 +68,8 @@ class ChartGenerationTool(BaseTool):
         cases = [item['cases'] for item in data]
 
         plt.figure(figsize=(12, 6))
-        plt.plot(dates, cases, marker='o', linewidth=2, markersize=4, color='#2E86AB')
+        # matplotlib plota datetimes nativamente; os stubs não listam esse caso.
+        plt.plot(dates, cases, marker='o', linewidth=2, markersize=4, color='#2E86AB')  # type: ignore[arg-type]
 
         plt.title('Casos Diários de SRAG - Últimos 30 Dias', fontsize=16, fontweight='bold')
         plt.xlabel('Data', fontsize=12)
@@ -90,7 +92,7 @@ class ChartGenerationTool(BaseTool):
         logger.info(f"Gráfico diário salvo em: {filename}")
         return filename
 
-    def _generate_monthly_chart(self, data: List[Dict], output_path: str) -> str:
+    def _generate_monthly_chart(self, data: list[dict], output_path: str) -> str:
         """
         Gera gráfico de casos mensais.
 
@@ -124,7 +126,7 @@ class ChartGenerationTool(BaseTool):
         return filename
 
     def _run(self, chart_type: str, data: str,
-             output_path: Optional[str] = None) -> Dict[str, Any]:
+             output_path: str | None = None) -> dict[str, Any]:
         """
         Executa a geração de gráfico.
 
@@ -171,7 +173,7 @@ class ChartGenerationTool(BaseTool):
                 "error": str(e)
             }
 
-    async def _arun(self, chart_type: str, data: str, output_path: str = "") -> Dict[str, Any]:
+    async def _arun(self, chart_type: str, data: str, output_path: str = "") -> dict[str, Any]:
         """Versão assíncrona (não implementada)."""
         raise NotImplementedError("Versão assíncrona não implementada")
 

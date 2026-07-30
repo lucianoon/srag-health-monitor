@@ -1,20 +1,18 @@
 """Serviço de ingestão de dados oficiais do SUS."""
 
+import json
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from time import perf_counter
-from typing import Optional
 from urllib.parse import urlparse
-import json
-import logging
 
 import requests
 
 from config import AppConfig
 from database.db_manager import SRAGDatabase
 from utils.data_processor import SRAGDataProcessor
-
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +40,8 @@ class DataIngestionService:
     def run(
         self,
         *,
-        source_url: Optional[str] = None,
-        nrows: Optional[int] = None,
+        source_url: str | None = None,
+        nrows: int | None = None,
     ) -> DataIngestionResult:
         """Executa ingestão completa para o cache SQLite local."""
         resolved_source_url = source_url or self.config.sus_data_url
@@ -98,7 +96,7 @@ class DataIngestionService:
         self,
         *,
         raw_path: Path,
-        nrows: Optional[int],
+        nrows: int | None,
     ) -> tuple[Path, int]:
         processed_dir = self.config.data_dir / "processed"
         processed_dir.mkdir(parents=True, exist_ok=True)

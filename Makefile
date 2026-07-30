@@ -6,7 +6,7 @@ PIP := $(VENV)/bin/pip
 export PYTHONPATH := src
 export MPLBACKEND := Agg
 
-.PHONY: venv install test compile ingest api worker worker-once docker-config docker-build docker-up docker-down smoke clean
+.PHONY: venv install test lint typecheck check ingest api worker worker-once docker-config docker-build docker-up docker-down smoke clean
 
 venv:
 	$(PYTHON) -m venv $(VENV)
@@ -16,10 +16,16 @@ install: venv
 	$(PIP) install -r requirements.txt
 
 test:
-	PYTHONPYCACHEPREFIX=/private/tmp/srag_pycache MPLCONFIGDIR=/private/tmp/srag_mplconfig $(VENV_PYTHON) -m unittest discover -s tests -p "test*.py"
+	PYTHONPYCACHEPREFIX=/private/tmp/srag_pycache MPLCONFIGDIR=/private/tmp/srag_mplconfig $(VENV_PYTHON) -m pytest -q
 
-compile:
-	PYTHONPYCACHEPREFIX=/private/tmp/srag_pycache MPLCONFIGDIR=/private/tmp/srag_mplconfig $(VENV_PYTHON) -m compileall -q src main.py worker.py ingest.py tests
+lint:
+	$(VENV)/bin/ruff check .
+
+typecheck:
+	$(VENV)/bin/mypy
+
+# Os mesmos gates que o CI aplica.
+check: lint typecheck test
 
 ingest:
 	$(VENV_PYTHON) ingest.py

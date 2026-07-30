@@ -8,12 +8,12 @@ de SRAG/vírus respiratórios e por data. Em caso de falha de rede ou parsing, a
 ferramenta degrada para uma lista vazia — nunca fabrica notícias nem números.
 """
 
-from datetime import datetime, timezone
-from email.utils import parsedate_to_datetime
-from typing import Any, Dict, List, Optional
-from xml.etree import ElementTree as ET
 import logging
 import re
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
+from typing import Any
+from xml.etree import ElementTree as ET
 
 import requests
 from bs4 import BeautifulSoup
@@ -94,15 +94,15 @@ def _normalize_date(raw_date: str) -> str:
     return parsed.date().isoformat()
 
 
-def _sort_key(parsed_date: Optional[datetime]) -> datetime:
+def _sort_key(parsed_date: datetime | None) -> datetime:
     if parsed_date is None:
-        return datetime.min.replace(tzinfo=timezone.utc)
+        return datetime.min.replace(tzinfo=UTC)
     if parsed_date.tzinfo is None:
-        return parsed_date.replace(tzinfo=timezone.utc)
+        return parsed_date.replace(tzinfo=UTC)
     return parsed_date
 
 
-def parse_feed(content: bytes, source_name: str) -> List[Dict[str, Any]]:
+def parse_feed(content: bytes, source_name: str) -> list[dict[str, Any]]:
     """Faz o parsing de um feed RSS/Atom em uma lista de notícias.
 
     Função pura (sem rede) para facilitar testes determinísticos.
@@ -113,7 +113,7 @@ def parse_feed(content: bytes, source_name: str) -> List[Dict[str, Any]]:
         logger.warning("Feed inválido de %s: %s", source_name, exc)
         return []
 
-    news: List[Dict[str, Any]] = []
+    news: list[dict[str, Any]] = []
     for item in root.findall(".//{*}item"):
         title = _element_text(item, "title")
         if not title or title.lower().startswith(_JUNK_TITLE_PREFIXES):
@@ -139,7 +139,7 @@ def parse_feed(content: bytes, source_name: str) -> List[Dict[str, Any]]:
     return news
 
 
-def _relevance_score(item: Dict[str, Any]) -> int:
+def _relevance_score(item: dict[str, Any]) -> int:
     haystack = f"{item.get('title', '')} {item.get('summary', '')}".lower()
     return sum(1 for term in RELEVANCE_TERMS if term in haystack)
 
@@ -168,7 +168,7 @@ class NewsSearchTool(BaseTool):
         "data e URL das notícias encontradas."
     )
     args_schema: type[BaseModel] = NewsSearchInput
-    feeds: List[Dict[str, str]] = Field(default_factory=lambda: list(DEFAULT_NEWS_FEEDS))
+    feeds: list[dict[str, str]] = Field(default_factory=lambda: list(DEFAULT_NEWS_FEEDS))
     timeout_seconds: float = 15.0
 
     def _fetch_feed(self, url: str) -> bytes:
@@ -181,8 +181,8 @@ class NewsSearchTool(BaseTool):
         response.raise_for_status()
         return response.content
 
-    def _collect(self, max_results: int) -> List[Dict[str, Any]]:
-        collected: List[Dict[str, Any]] = []
+    def _collect(self, max_results: int) -> list[dict[str, Any]]:
+        collected: list[dict[str, Any]] = []
         for feed in self.feeds:
             try:
                 content = self._fetch_feed(feed["url"])
@@ -193,7 +193,7 @@ class NewsSearchTool(BaseTool):
 
         # Dedupe por título normalizado, preservando a primeira ocorrência.
         seen = set()
-        unique: List[Dict[str, Any]] = []
+        unique: list[dict[str, Any]] = []
         for item in collected:
             key = re.sub(r"\s+", " ", item["title"].lower()).strip()
             if key in seen:
@@ -219,7 +219,7 @@ class NewsSearchTool(BaseTool):
         self,
         query: str = "SRAG síndrome respiratória aguda grave Brasil",
         max_results: int = 5,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Executa a busca de notícias reais nos feeds configurados."""
         logger.info("Buscando notícias sobre: %s", query)
 
@@ -241,12 +241,12 @@ class NewsSearchTool(BaseTool):
         self,
         query: str = "SRAG",
         max_results: int = 5,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Versão assíncrona (não implementada)."""
         raise NotImplementedError("Versão assíncrona não implementada")
 
 
-def create_news_tool(feeds: Optional[List[Dict[str, str]]] = None) -> NewsSearchTool:
+def create_news_tool(feeds: list[dict[str, str]] | None = None) -> NewsSearchTool:
     """Cria e retorna uma instância da ferramenta de notícias."""
     if feeds:
         return NewsSearchTool(feeds=list(feeds))
