@@ -1,16 +1,14 @@
 """Agente de ingestão de dados oficiais de SRAG."""
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
-import logging
 
 from config import AppConfig
 from services.data_ingestion_service import DataIngestionResult, DataIngestionService
 from tools.database_tool import create_database_tool
 from tools.news_tool import create_news_tool
-
 
 logger = logging.getLogger(__name__)
 
@@ -80,8 +78,8 @@ class SUSDataIngestionAgent:
     def refresh_cache(
         self,
         *,
-        source_url: Optional[str] = None,
-        nrows: Optional[int] = None,
+        source_url: str | None = None,
+        nrows: int | None = None,
     ) -> DataIngestionResult:
         """Atualiza o cache local a partir de uma fonte oficial configurada."""
         logger.info("Agente de ingestão atualizando cache local de dados SUS")
@@ -100,7 +98,7 @@ class SUSDataIngestionAgent:
 
     def _source_metadata(self) -> dict:
         db_path = Path(self.config.db_path)
-        updated_at: Optional[str] = None
+        updated_at: str | None = None
         if db_path.exists():
             updated_at = datetime.fromtimestamp(db_path.stat().st_mtime).isoformat()
 

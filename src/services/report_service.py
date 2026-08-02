@@ -8,7 +8,6 @@ API HTTP ou workers assíncronos.
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
-from typing import List, Optional
 
 from agents.report_pipeline import SRAGMultiAgentReportOrchestrator
 from config import AppConfig
@@ -26,7 +25,7 @@ class GenerateReportResult:
     duration_ms: float
     summary: dict
     pii_detected: bool
-    pii_types: List[str]
+    pii_types: list[str]
 
 
 class GenerateReportService:
@@ -42,7 +41,7 @@ class GenerateReportService:
         self.audit_logger = audit_logger
         self.execution_tracker = execution_tracker
 
-    def run(self, execution_id: Optional[str] = None) -> GenerateReportResult:
+    def run(self, execution_id: str | None = None) -> GenerateReportResult:
         """Gera, valida, audita e retorna um relatório de SRAG.
 
         Passar o execution_id de uma execução que falhou retoma o pipeline

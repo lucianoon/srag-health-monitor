@@ -11,17 +11,17 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from tests.conftest import (  # também garante src/ no sys.path
-    TempSRAGDatabaseMixin,
-    make_app_config,
-    offline_news_guard,
-)
 from agents.data_ingestion_agent import DataSnapshot, SUSDataIngestionAgent
 from agents.epidemiology_analysis_agent import EpidemiologyAnalysisAgent
 from agents.report_pipeline import SRAGMultiAgentReportOrchestrator
 from agents.report_writer_agent import ReportNarrative, ReportWriterAgent
 from guardrails.validators import OutputValidator
 from services.report_blackboard import ReportBlackboard, Step, StepExecutionError
+from tests.conftest import (  # também garante src/ no sys.path
+    TempSRAGDatabaseMixin,
+    make_app_config,
+    offline_news_guard,
+)
 
 # Mantém o módulo offline: o pipeline coleta notícias como parte da execução.
 setUpModule, tearDownModule = offline_news_guard()

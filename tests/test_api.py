@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from tests.conftest import offline_news_guard  # também garante src/ no sys.path
 from services.job_store import InMemoryJobStore, JobStatus
+from tests.conftest import offline_news_guard  # também garante src/ no sys.path
 
 # Mantém o módulo offline: POST /reports/sync executa o pipeline completo,
 # incluindo a coleta de notícias.
@@ -17,6 +17,7 @@ setUpModule, tearDownModule = offline_news_guard()
 class TestApi(unittest.TestCase):
     def setUp(self):
         from fastapi.testclient import TestClient
+
         from api import app as api_app
 
         self.api_app = api_app
@@ -165,15 +166,17 @@ class TestApi(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_sync_report_returns_500_when_database_is_missing(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with mock.patch.dict(os.environ, {"SRAG_DATA_DIR": tmpdir}, clear=False):
-                response = self.client.post(
-                    "/reports/sync",
-                    json={
-                        "db_path": str(Path(tmpdir) / "missing.db"),
-                        "output_dir": str(Path(tmpdir) / "reports"),
-                    },
-                )
+        with (
+            tempfile.TemporaryDirectory() as tmpdir,
+            mock.patch.dict(os.environ, {"SRAG_DATA_DIR": tmpdir}, clear=False),
+        ):
+            response = self.client.post(
+                "/reports/sync",
+                json={
+                    "db_path": str(Path(tmpdir) / "missing.db"),
+                    "output_dir": str(Path(tmpdir) / "reports"),
+                },
+            )
 
         self.assertEqual(response.status_code, 500)
         self.assertIn("Banco de dados não encontrado", response.json()["detail"])

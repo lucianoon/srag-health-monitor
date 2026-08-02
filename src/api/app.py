@@ -1,8 +1,7 @@
 """API HTTP do SRAG Health Monitor."""
 
-from pathlib import Path
 import secrets
-from typing import List, Optional
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 from fastapi.responses import FileResponse
@@ -17,9 +16,9 @@ from services.report_service import GenerateReportService
 class GenerateReportRequest(BaseModel):
     """Parâmetros aceitos para geração de relatório via API."""
 
-    model: Optional[str] = Field(default=None)
-    output_dir: Optional[str] = Field(default=None)
-    db_path: Optional[str] = Field(default=None)
+    model: str | None = Field(default=None)
+    output_dir: str | None = Field(default=None)
+    db_path: str | None = Field(default=None)
 
 
 class GenerateReportResponse(BaseModel):
@@ -29,7 +28,7 @@ class GenerateReportResponse(BaseModel):
     report_path: str
     duration_ms: float
     pii_detected: bool
-    pii_types: List[str]
+    pii_types: list[str]
     summary: dict
 
 
@@ -48,13 +47,13 @@ class ReportJobResponse(BaseModel):
     status: JobStatus
     created_at: str
     updated_at: str
-    execution_id: Optional[str] = None
-    report_path: Optional[str] = None
-    duration_ms: Optional[float] = None
+    execution_id: str | None = None
+    report_path: str | None = None
+    duration_ms: float | None = None
     pii_detected: bool = False
-    pii_types: List[str] = Field(default_factory=list)
-    summary: Optional[dict] = None
-    error: Optional[str] = None
+    pii_types: list[str] = Field(default_factory=list)
+    summary: dict | None = None
+    error: str | None = None
 
 
 class ReadinessResponse(BaseModel):
@@ -72,7 +71,7 @@ class MetricsResponse(BaseModel):
 
     total_jobs: int
     jobs_by_status: dict
-    recent_failures: List[ReportJobResponse]
+    recent_failures: list[ReportJobResponse]
 
 
 app = FastAPI(
@@ -124,7 +123,7 @@ def _build_config(request: GenerateReportRequest) -> AppConfig:
     return config
 
 
-def require_api_key(x_api_key: Optional[str] = Header(default=None)) -> None:
+def require_api_key(x_api_key: str | None = Header(default=None)) -> None:
     """Exige X-API-Key quando SRAG_API_KEY estiver configurada."""
     expected_api_key = AppConfig.from_env().api_key
     if not expected_api_key:
@@ -244,12 +243,12 @@ def retry_report_job(
     )
 
 
-@app.get("/reports", response_model=List[ReportJobResponse])
+@app.get("/reports", response_model=list[ReportJobResponse])
 def list_report_jobs(
     limit: int = Query(default=20, ge=1, le=100),
-    status_filter: Optional[JobStatus] = Query(default=None, alias="status"),
+    status_filter: JobStatus | None = Query(default=None, alias="status"),
     _auth: None = Depends(require_api_key),
-) -> List[ReportJobResponse]:
+) -> list[ReportJobResponse]:
     """Lista jobs recentes, opcionalmente filtrados por status."""
     jobs = job_store.list_recent(limit=limit, status=status_filter)
     return [_job_response(job) for job in jobs]

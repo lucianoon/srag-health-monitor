@@ -347,18 +347,22 @@ make docker-config
 
 The suite has **89 tests**, all offline and deterministic: no test makes a
 network call or requires an API key (news fetching is disabled and the
-narrative uses the deterministic fallback). It runs under both `unittest`
-(used in CI) and `pytest`:
+narrative uses the deterministic fallback). It runs under both `pytest`
+(used in CI) and `unittest`:
 
 ```bash
-# via unittest (the same command CI runs)
+# via pytest (the same command CI runs)
 make test
 # or
-python -m unittest discover -s tests -p "test*.py"
+pytest -q
 
-# via pytest
-python -m pytest tests/ -q
+# via unittest — `-t .` is required so tests/__init__.py runs and puts
+# src/ on sys.path before the test modules are imported
+python -m unittest discover -t . -s tests -p "test*.py"
 ```
+
+The same gates CI enforces: `ruff check .`, `mypy` and `pytest -q`
+(or `make check`).
 
 Tests are organized to mirror the source modules:
 

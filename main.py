@@ -6,10 +6,10 @@ Este script coordena todo o fluxo de geração de relatórios,
 incluindo validações, auditoria e tratamento de erros.
 """
 
+import argparse
 import os
 import sys
 from datetime import datetime
-import argparse
 
 # Adicionar src ao path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))

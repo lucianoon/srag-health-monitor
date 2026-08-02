@@ -1,14 +1,15 @@
 """Armazenamento simples de jobs para execução assíncrona."""
 
+import json
+import sqlite3
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-import json
-import sqlite3
 from threading import Lock
-from typing import Dict, Iterator, List, Optional, Protocol, Union
+from typing import Protocol
 from uuid import uuid4
 
 
@@ -29,23 +30,23 @@ class ReportJob:
     status: JobStatus
     created_at: datetime
     updated_at: datetime
-    execution_id: Optional[str] = None
-    report_path: Optional[str] = None
-    duration_ms: Optional[float] = None
+    execution_id: str | None = None
+    report_path: str | None = None
+    duration_ms: float | None = None
     pii_detected: bool = False
-    pii_types: List[str] = field(default_factory=list)
-    summary: Optional[dict] = None
-    error: Optional[str] = None
+    pii_types: list[str] = field(default_factory=list)
+    summary: dict | None = None
+    error: str | None = None
     payload: dict = field(default_factory=dict)
 
 
 class JobStore(Protocol):
     """Contrato de persistência para jobs."""
 
-    def create(self, payload: Optional[dict] = None) -> ReportJob:
+    def create(self, payload: dict | None = None) -> ReportJob:
         """Cria um job pendente."""
 
-    def get(self, job_id: str) -> Optional[ReportJob]:
+    def get(self, job_id: str) -> ReportJob | None:
         """Retorna um job pelo id."""
 
     def mark_running(self, job_id: str) -> None:
@@ -62,7 +63,7 @@ class JobStore(Protocol):
         report_path: str,
         duration_ms: float,
         pii_detected: bool,
-        pii_types: List[str],
+        pii_types: list[str],
         summary: dict,
     ) -> None:
         """Marca o job como concluído."""
@@ -70,17 +71,17 @@ class JobStore(Protocol):
     def mark_failed(self, job_id: str, error: str) -> None:
         """Marca o job como falho."""
 
-    def claim_next(self) -> Optional[ReportJob]:
+    def claim_next(self) -> ReportJob | None:
         """Reserva o próximo job pendente para execução."""
 
     def list_recent(
         self,
         limit: int = 20,
-        status: Optional[JobStatus] = None,
-    ) -> List[ReportJob]:
+        status: JobStatus | None = None,
+    ) -> list[ReportJob]:
         """Lista jobs recentes."""
 
-    def status_counts(self) -> Dict[JobStatus, int]:
+    def status_counts(self) -> dict[JobStatus, int]:
         """Conta jobs por status."""
 
 
@@ -92,10 +93,10 @@ class InMemoryJobStore:
     """
 
     def __init__(self):
-        self._jobs: Dict[str, ReportJob] = {}
+        self._jobs: dict[str, ReportJob] = {}
         self._lock = Lock()
 
-    def create(self, payload: Optional[dict] = None) -> ReportJob:
+    def create(self, payload: dict | None = None) -> ReportJob:
         """Cria um job pendente."""
         now = datetime.now()
         job = ReportJob(
@@ -109,7 +110,7 @@ class InMemoryJobStore:
             self._jobs[job.job_id] = job
         return job
 
-    def get(self, job_id: str) -> Optional[ReportJob]:
+    def get(self, job_id: str) -> ReportJob | None:
         """Retorna um job pelo id."""
         with self._lock:
             return self._jobs.get(job_id)
@@ -130,7 +131,7 @@ class InMemoryJobStore:
         report_path: str,
         duration_ms: float,
         pii_detected: bool,
-        pii_types: List[str],
+        pii_types: list[str],
         summary: dict,
     ) -> None:
         """Marca o job como concluído com sucesso."""
@@ -150,7 +151,7 @@ class InMemoryJobStore:
         """Marca o job como falho."""
         self._update(job_id, status=JobStatus.FAILED, error=error)
 
-    def claim_next(self) -> Optional[ReportJob]:
+    def claim_next(self) -> ReportJob | None:
         """Reserva o próximo job pendente para execução."""
         with self._lock:
             queued_jobs = [
@@ -167,8 +168,8 @@ class InMemoryJobStore:
     def list_recent(
         self,
         limit: int = 20,
-        status: Optional[JobStatus] = None,
-    ) -> List[ReportJob]:
+        status: JobStatus | None = None,
+    ) -> list[ReportJob]:
         """Lista jobs recentes."""
         with self._lock:
             jobs = list(self._jobs.values())
@@ -180,10 +181,10 @@ class InMemoryJobStore:
                 reverse=True,
             )[:limit]
 
-    def status_counts(self) -> Dict[JobStatus, int]:
+    def status_counts(self) -> dict[JobStatus, int]:
         """Conta jobs por status."""
         with self._lock:
-            counts = {status: 0 for status in JobStatus}
+            counts = dict.fromkeys(JobStatus, 0)
             for job in self._jobs.values():
                 counts[job.status] += 1
             return counts
@@ -199,13 +200,13 @@ class InMemoryJobStore:
 class SQLiteJobStore:
     """Store persistente de jobs em SQLite."""
 
-    def __init__(self, db_path: Union[str, Path]):
+    def __init__(self, db_path: str | Path):
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = Lock()
         self._initialize()
 
-    def create(self, payload: Optional[dict] = None) -> ReportJob:
+    def create(self, payload: dict | None = None) -> ReportJob:
         """Cria um job pendente."""
         now = datetime.now()
         job = ReportJob(
@@ -235,7 +236,7 @@ class SQLiteJobStore:
             )
         return job
 
-    def get(self, job_id: str) -> Optional[ReportJob]:
+    def get(self, job_id: str) -> ReportJob | None:
         """Retorna um job pelo id."""
         with self._lock, self._connect() as conn:
             row = conn.execute(
@@ -260,7 +261,7 @@ class SQLiteJobStore:
         report_path: str,
         duration_ms: float,
         pii_detected: bool,
-        pii_types: List[str],
+        pii_types: list[str],
         summary: dict,
     ) -> None:
         """Marca o job como concluído com sucesso."""
@@ -280,7 +281,7 @@ class SQLiteJobStore:
         """Marca o job como falho."""
         self._update(job_id, status=JobStatus.FAILED.value, error=error)
 
-    def claim_next(self) -> Optional[ReportJob]:
+    def claim_next(self) -> ReportJob | None:
         """Reserva o próximo job pendente para execução."""
         with self._lock, self._connect() as conn:
             row = conn.execute(
@@ -320,8 +321,8 @@ class SQLiteJobStore:
     def list_recent(
         self,
         limit: int = 20,
-        status: Optional[JobStatus] = None,
-    ) -> List[ReportJob]:
+        status: JobStatus | None = None,
+    ) -> list[ReportJob]:
         """Lista jobs recentes."""
         bounded_limit = max(1, min(limit, 100))
         query = "SELECT * FROM report_jobs"
@@ -336,9 +337,9 @@ class SQLiteJobStore:
             rows = conn.execute(query, params).fetchall()
         return [self._row_to_job(row) for row in rows]
 
-    def status_counts(self) -> Dict[JobStatus, int]:
+    def status_counts(self) -> dict[JobStatus, int]:
         """Conta jobs por status."""
-        counts = {status: 0 for status in JobStatus}
+        counts = dict.fromkeys(JobStatus, 0)
         with self._lock, self._connect() as conn:
             rows = conn.execute(
                 """

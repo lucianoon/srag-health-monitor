@@ -9,11 +9,11 @@ Este módulo é responsável por:
 - Gerar estatísticas descritivas
 """
 
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
-from typing import Dict, List, Tuple
 import logging
+from datetime import timedelta
+
+import numpy as np
+import pandas as pd
 
 # Configurar logging
 logging.basicConfig(
@@ -62,10 +62,10 @@ class SRAGDataProcessor:
             raw_data_path: Caminho para o arquivo CSV bruto
         """
         self.raw_data_path = raw_data_path
-        self.df = None
-        self.df_processed = None
+        self.df: pd.DataFrame | None = None
+        self.df_processed: pd.DataFrame | None = None
 
-    def load_data(self, nrows: int = None) -> pd.DataFrame:
+    def load_data(self, nrows: int | None = None) -> pd.DataFrame:
         """
         Carrega dados do CSV.
 
@@ -78,7 +78,7 @@ class SRAGDataProcessor:
         logger.info(f"Carregando dados de {self.raw_data_path}")
 
         try:
-            self.df = pd.read_csv(
+            df = pd.read_csv(
                 self.raw_data_path,
                 sep=';',
                 encoding='latin1',
@@ -86,8 +86,9 @@ class SRAGDataProcessor:
                 nrows=nrows,
                 low_memory=False
             )
-            logger.info(f"Dados carregados: {len(self.df)} linhas, {len(self.df.columns)} colunas")
-            return self.df
+            self.df = df
+            logger.info(f"Dados carregados: {len(df)} linhas, {len(df.columns)} colunas")
+            return df
         except Exception as e:
             logger.error(f"Erro ao carregar dados: {e}")
             raise
@@ -161,7 +162,7 @@ class SRAGDataProcessor:
         else:
             return np.nan
 
-    def get_statistics(self) -> Dict:
+    def get_statistics(self) -> dict:
         """
         Gera estatísticas descritivas dos dados.
 

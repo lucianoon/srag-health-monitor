@@ -1,0 +1,27 @@
+line-length = 100
+target-version = "py311"
+src = ["src", "."]
+
+[lint]
+# UP042 pediria StrEnum no lugar de (str, Enum). Isso muda o que str(Membro)
+# devolve, e o código usa tanto o membro quanto o .value — mudança de
+# comportamento, não de estilo.
+ignore = ["UP042"]
+select = [
+    "E",   # pycodestyle
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+]
+
+[lint.per-file-ignores]
+# Query()/Depends() no default de argumento é o idioma do FastAPI, não um bug.
+"src/api/app.py" = ["B008"]
+# Linhas longas dentro de templates markdown do relatório e de fixtures XML:
+# quebrá-las mudaria o texto gerado / o payload de teste, não a formatação.
+"src/agents/orchestrator.py" = ["E501"]
+"src/agents/report_writer_agent.py" = ["E501"]
+"tests/test_tools.py" = ["E501"]

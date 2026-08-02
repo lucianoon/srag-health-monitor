@@ -1,16 +1,14 @@
 """Agente de escrita de relatórios epidemiológicos."""
 
-from datetime import datetime
-from typing import Optional
 import json
 import logging
+from datetime import datetime
 
 from pydantic import BaseModel, Field
 
 from agents.epidemiology_analysis_agent import EpidemiologyAnalysis
 from config import AppConfig
 from tools.chart_tool import create_chart_tool
-
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +84,7 @@ class ReportWriterAgent:
 
         return charts
 
-    def generate_narrative(self, analysis: EpidemiologyAnalysis) -> Optional[ReportNarrative]:
+    def generate_narrative(self, analysis: EpidemiologyAnalysis) -> ReportNarrative | None:
         """Gera narrativa via LLM; retorna None para usar o modo determinístico."""
         if self.llm is None:
             return None
@@ -228,7 +226,8 @@ Com base nos dados mais recentes do DATASUS, foram registrados **{metrics.get('t
         report += "\n---\n\n## 5. Fonte e Rastreabilidade\n\n"
         report += f"- Fonte: {analysis.source.get('provider', 'DATASUS/SIVEP-Gripe')}\n"
         report += f"- Tipo de fonte: {analysis.source.get('source_type', 'não informado')}\n"
-        report += f"- Última atualização local: {analysis.source.get('updated_at') or 'não informada'}\n"
+        updated_at = analysis.source.get('updated_at') or 'não informada'
+        report += f"- Última atualização local: {updated_at}\n"
         report += f"- Narrativa: {self.narrative_mode}\n"
 
         report += "\n---\n\n"

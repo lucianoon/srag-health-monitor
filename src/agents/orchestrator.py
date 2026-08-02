@@ -5,19 +5,22 @@ Este agente coordena as ferramentas disponíveis para gerar relatórios
 automatizados sobre a situação de SRAG no Brasil.
 """
 
-from tools.chart_tool import create_chart_tool
-from tools.news_tool import create_news_tool
-from tools.database_tool import create_database_tool
-from config import AppConfig
-from typing import Optional, TypedDict, Annotated, Sequence
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import BaseMessage
+import json
+import logging
 import operator
 import os
 import sys
-import json
-import logging
+from collections.abc import Sequence
 from datetime import datetime
+from typing import Annotated, Any, TypedDict
+
+from langchain_core.messages import BaseMessage
+from langchain_openai import ChatOpenAI
+
+from config import AppConfig
+from tools.chart_tool import create_chart_tool
+from tools.database_tool import create_database_tool
+from tools.news_tool import create_news_tool
 
 # Adicionar path do projeto
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -43,7 +46,7 @@ class AgentState(TypedDict):
 class SRAGReportOrchestrator:
     """Orquestrador para geração de relatórios de SRAG."""
 
-    def __init__(self, model_name: Optional[str] = None, config: Optional[AppConfig] = None):
+    def __init__(self, model_name: str | None = None, config: AppConfig | None = None):
         """
         Inicializa o orquestrador.
 
@@ -66,11 +69,11 @@ class SRAGReportOrchestrator:
 
         # ID de execução
         self.execution_id = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        self.last_metrics = {}
-        self.last_daily_cases = {}
-        self.last_monthly_cases = {}
-        self.last_news = {}
-        self.last_charts = {}
+        self.last_metrics: dict[str, Any] = {}
+        self.last_daily_cases: dict[str, Any] = {}
+        self.last_monthly_cases: dict[str, Any] = {}
+        self.last_news: dict[str, Any] = {}
+        self.last_charts: dict[str, Any] = {}
         self.report_path = self.config.reports_dir / f"relatorio_{self.execution_id}.md"
 
         logger.info(f"Orquestrador inicializado com modelo {self.model_name}")
@@ -179,9 +182,15 @@ Com base nos dados mais recentes do DATASUS, foram registrados **{metrics.get('t
         # Adicionar análise da taxa de crescimento
         taxa_crescimento = metrics.get('taxa_aumento_casos', 0)
         if taxa_crescimento > 0:
-            report += f"\nObserva-se uma **tendência de crescimento** de {taxa_crescimento:.2f}% nos casos, indicando necessidade de atenção reforçada às medidas preventivas.\n"
+            report += (
+                f"\nObserva-se uma **tendência de crescimento** de {taxa_crescimento:.2f}% "
+                "nos casos, indicando necessidade de atenção reforçada às medidas preventivas.\n"
+            )
         elif taxa_crescimento < 0:
-            report += f"\nObserva-se uma **tendência de redução** de {abs(taxa_crescimento):.2f}% nos casos, sinalizando possível controle da situação epidemiológica.\n"
+            report += (
+                f"\nObserva-se uma **tendência de redução** de {abs(taxa_crescimento):.2f}% "
+                "nos casos, sinalizando possível controle da situação epidemiológica.\n"
+            )
         else:
             report += "\nOs casos mantêm-se **estáveis** em relação ao período anterior.\n"
 
@@ -213,29 +222,44 @@ Com base nos dados mais recentes do DATASUS, foram registrados **{metrics.get('t
         # Análise da mortalidade
         taxa_mort = metrics.get('taxa_mortalidade', 0)
         if taxa_mort > 10:
-            report += "- A taxa de mortalidade está **acima da média histórica**, exigindo revisão dos protocolos de atendimento.\n"
+            report += (
+                "- A taxa de mortalidade está **acima da média histórica**, "
+                "exigindo revisão dos protocolos de atendimento.\n"
+            )
         elif taxa_mort < 5:
-            report += "- A taxa de mortalidade está **abaixo da média histórica**, indicando eficácia dos protocolos de tratamento.\n"
+            report += (
+                "- A taxa de mortalidade está **abaixo da média histórica**, "
+                "indicando eficácia dos protocolos de tratamento.\n"
+            )
         else:
             report += "- A taxa de mortalidade está **dentro da faixa esperada** para SRAG.\n"
 
         # Análise da UTI
         taxa_uti = metrics.get('taxa_ocupacao_uti', 0)
         if taxa_uti > 30:
-            report += "- A taxa de ocupação de UTI está **elevada**, recomenda-se monitoramento da capacidade hospitalar.\n"
+            report += (
+                "- A taxa de ocupação de UTI está **elevada**, "
+                "recomenda-se monitoramento da capacidade hospitalar.\n"
+            )
         else:
             report += "- A taxa de ocupação de UTI está **controlada**.\n"
 
         # Análise da vacinação
         taxa_vac = metrics.get('taxa_vacinacao', 0)
         if taxa_vac < 60:
-            report += "- A taxa de vacinação está **abaixo do ideal**, recomenda-se intensificar campanhas de imunização.\n"
+            report += (
+                "- A taxa de vacinação está **abaixo do ideal**, "
+                "recomenda-se intensificar campanhas de imunização.\n"
+            )
         else:
-            report += "- A taxa de vacinação está **satisfatória**, contribuindo para o controle de casos graves.\n"
+            report += (
+                "- A taxa de vacinação está **satisfatória**, "
+                "contribuindo para o controle de casos graves.\n"
+            )
 
         report += "\n---\n\n"
-        report += f"**Relatório gerado automaticamente pelo Sistema de Monitoramento de SRAG**  \n"
-        report += f"*Fonte de dados: DATASUS/SIVEP-Gripe*  \n"
+        report += "**Relatório gerado automaticamente pelo Sistema de Monitoramento de SRAG**  \n"
+        report += "*Fonte de dados: DATASUS/SIVEP-Gripe*  \n"
         report += f"*Data de geração: {datetime.now().strftime('%d/%m/%Y às %H:%M')}*\n"
 
         return report

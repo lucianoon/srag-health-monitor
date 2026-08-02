@@ -4,9 +4,9 @@ import tempfile
 import unittest
 from unittest import mock
 
-from tests.conftest import make_app_config  # também garante src/ no sys.path
 from database.db_manager import SRAGDatabase
 from services.data_ingestion_service import DataIngestionService
+from tests.conftest import make_app_config  # também garante src/ no sys.path
 
 
 class TestDataIngestionService(unittest.TestCase):

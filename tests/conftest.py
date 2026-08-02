@@ -10,13 +10,12 @@ import os
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional, Union
 
 import requests
 
-from tests import PROJECT_ROOT
 from config import AppConfig
 from database.db_manager import SRAGDatabase
+from tests import PROJECT_ROOT
 from tools.news_tool import NewsSearchTool
 
 __all__ = [
@@ -54,22 +53,22 @@ def offline_news_guard():
 
 
 def make_app_config(
-    base_dir: Union[str, Path],
-    db_path: Optional[Union[str, Path]] = None,
+    base_dir: str | Path,
+    db_path: str | Path | None = None,
     **overrides,
 ) -> AppConfig:
     """Cria um AppConfig apontando todos os caminhos para um diretório de teste."""
     base = Path(base_dir)
-    params = dict(
-        project_root=PROJECT_ROOT,
-        data_dir=base,
-        db_path=Path(db_path) if db_path else base / "srag.db",
-        jobs_db_path=base / "jobs.db",
-        reports_dir=base / "reports",
-        logs_dir=base / "logs",
-        model_name="gpt-4.1-mini",
-        openai_api_key=None,
-    )
+    params = {
+        "project_root": PROJECT_ROOT,
+        "data_dir": base,
+        "db_path": Path(db_path) if db_path else base / "srag.db",
+        "jobs_db_path": base / "jobs.db",
+        "reports_dir": base / "reports",
+        "logs_dir": base / "logs",
+        "model_name": "gpt-4.1-mini",
+        "openai_api_key": None,
+    }
     params.update(overrides)
     return AppConfig(**params)
 
