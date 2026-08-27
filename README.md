@@ -121,7 +121,9 @@ determinístico; o LLM escreve apenas a narrativa, com instruções de não
 inventar números e sem acesso a dados de pacientes. O texto gerado passa pelos
 mesmos guardrails de validação de conteúdo e anonimização de PII.
 
-## Setup Local
+## Execução
+
+### Instalação
 
 ```bash
 make install
@@ -133,7 +135,7 @@ Opcionalmente copie o arquivo de ambiente:
 cp .env.example .env
 ```
 
-## Rodar Sem Docker
+### Sem Docker
 
 Terminal 1:
 
@@ -186,7 +188,7 @@ curl http://localhost:8000/reports \
   -H "X-API-Key: $SRAG_API_KEY"
 ```
 
-## Rodar Com Docker
+### Com Docker
 
 ```bash
 make docker-up
@@ -196,6 +198,14 @@ Parar:
 
 ```bash
 make docker-down
+```
+
+### Validação
+
+```bash
+make compile
+make test
+make docker-config
 ```
 
 ## API
@@ -338,14 +348,6 @@ make worker-once
 | `SRAG_SUS_DATA_URL` | vazio | URL do recurso CSV SRAG no portal oficial |
 | `SRAG_SUS_INGEST_NROWS` | vazio | limite opcional de linhas para smoke tests |
 | `SRAG_NEWS_FEEDS` | vazio | JSON opcional para sobrescrever os feeds RSS de notícias |
-
-## Validação
-
-```bash
-make compile
-make test
-make docker-config
-```
 
 ## Testes
 

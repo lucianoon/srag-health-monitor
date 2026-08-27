@@ -20,6 +20,17 @@ guardrails and chart generation.
 > surveillance information system that collects it, published as open data by
 > **DATASUS**, the Brazilian Ministry of Health's IT department.
 
+## Quick evidence
+
+| Evidence | What it demonstrates |
+|---|---|
+| 89 offline tests | Pipeline, API, worker, retry, guardrails and ingestion |
+| DATASUS/SIVEP-Gripe data | Applied to a real Brazilian public-health domain |
+| Per-stage resumable jobs | Resilience without redoing completed work |
+| Versioned report and chart | Output you can verify before installing anything |
+| Audit trail, PII anonymization and validations | Explicit security and governance |
+| API + worker on Docker Compose | Operational separation of the services |
+
 ## Overview
 
 The project grew from a PoC into an operable product base:
@@ -116,7 +127,9 @@ The LLM only writes prose, under instructions never to invent numbers, and with
 no access to patient data. The generated text goes through the same content
 validation and PII anonymization guardrails.
 
-## Local setup
+## Running
+
+### Installation
 
 ```bash
 make install
@@ -128,7 +141,7 @@ Optionally copy the environment file:
 cp .env.example .env
 ```
 
-## Running without Docker
+### Without Docker
 
 Terminal 1:
 
@@ -181,7 +194,7 @@ curl http://localhost:8000/reports \
   -H "X-API-Key: $SRAG_API_KEY"
 ```
 
-## Running with Docker
+### With Docker
 
 ```bash
 make docker-up
@@ -191,6 +204,14 @@ Stop:
 
 ```bash
 make docker-down
+```
+
+### Validation
+
+```bash
+make compile
+make test
+make docker-config
 ```
 
 ## API
@@ -334,14 +355,6 @@ make worker-once
 | `SRAG_SUS_DATA_URL` | empty | URL of the SRAG CSV resource on the official portal |
 | `SRAG_SUS_INGEST_NROWS` | empty | optional row limit for smoke tests |
 | `SRAG_NEWS_FEEDS` | empty | optional JSON overriding the RSS news feeds |
-
-## Validation
-
-```bash
-make compile
-make test
-make docker-config
-```
 
 ## Tests
 
