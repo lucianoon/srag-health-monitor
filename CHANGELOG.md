@@ -1,0 +1,46 @@
+# Changelog
+
+Todas as mudanças relevantes deste projeto são registradas aqui. O formato segue
+o espírito do [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); as
+versões seguem [SemVer](https://semver.org/lang/pt-BR/).
+
+## Unreleased
+
+### Alterado
+- CI: `actions/checkout` v4 para v7 e `actions/setup-python` v5 para v7.
+- CI passa a bloquear em `ruff`, `mypy` e `pytest`, não apenas nos testes (#11).
+- README: seções de execução agrupadas e tabela de evidências levada para o inglês.
+- README em português volta a ser o principal; a versão em inglês fica em `README.en.md`.
+- Documentação expõe evidências operacionais e um relatório de exemplo em `docs/exemplo/`.
+
+### Segurança
+- Política de reporte de vulnerabilidades em `SECURITY.md`.
+- Atualização de dependências mantida dentro dos runtimes suportados.
+- Atualização automática de versões pelo Dependabot desativada; bumps passam por revisão manual.
+
+## 0.1.0 — 2026-07-24
+
+Primeira versão marcada. Consolida a produtização do monitor de SRAG.
+
+### Adicionado
+- Pipeline de ingestão, API HTTP, worker e configuração Docker (`Dockerfile` e `docker-compose.yml`).
+- Geração de narrativa por LLM integrada ao pipeline de relatório.
+- Feeds RSS reais de fontes de saúde no lugar de notícias simuladas; URLs configuráveis via `SRAG_NEWS_FEEDS`.
+- Pipeline de relatório coordenado por blackboard de etapas (estigmergia) (#4).
+- `POST /reports/{job_id}/retry` com retomada a partir do ponto da falha (#5).
+- Suíte de testes dividida em módulos temáticos, cobrindo casos de borda da API, falhas do blackboard e guardrails de auditoria.
+- Relatório de exemplo com gráficos no README.
+- Workflow de testes em Python no GitHub Actions.
+
+### Corrigido
+- Conexões SQLite e handlers do log de auditoria fechados de forma determinística.
+- Nomes de arquivo dos gráficos recebem timestamp, evitando sobrescrita entre execuções.
+- Testes e caminhos tornados reprodutíveis entre ambientes.
+- Parsing de datas e tratamento de tabelas vazias no banco.
+
+### Removido
+- Notas de entrega da certificação, sem relação com o produto (#3).
+
+## Origem — 2025-11-06
+
+- Implementação inicial do SRAG Health Monitor: indicadores determinísticos, analytics e relatórios automatizados.
