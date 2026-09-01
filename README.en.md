@@ -135,6 +135,10 @@ validation and PII anonymization guardrails.
 make install
 ```
 
+`make install` runs `uv sync --locked`: versions come from `uv.lock`, so the
+local environment, CI and the Docker image resolve exactly the same
+dependencies. Install [uv](https://docs.astral.sh/uv/) if you do not have it.
+
 Optionally copy the environment file:
 
 ```bash
@@ -367,15 +371,15 @@ narrative uses the deterministic fallback). It runs under both `pytest`
 # via pytest (the same command CI runs)
 make test
 # or
-pytest -q
+uv run pytest -q
 
 # via unittest — `-t .` is required so tests/__init__.py runs and puts
 # src/ on sys.path before the test modules are imported
-python -m unittest discover -t . -s tests -p "test*.py"
+uv run python -m unittest discover -t . -s tests -p "test*.py"
 ```
 
-The same gates CI enforces: `ruff check .`, `mypy` and `pytest -q`
-(or `make check`).
+The same gates CI enforces: `uv run ruff check .`, `uv run mypy` and
+`uv run pytest -q` (or `make check`).
 
 Tests are organized to mirror the source modules:
 

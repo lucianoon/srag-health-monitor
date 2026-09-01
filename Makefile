@@ -1,43 +1,38 @@
-PYTHON ?= python3
-VENV ?= .venv
-VENV_PYTHON := $(VENV)/bin/python
-PIP := $(VENV)/bin/pip
-
 export PYTHONPATH := src
 export MPLBACKEND := Agg
 
-.PHONY: venv install test lint typecheck check ingest api worker worker-once docker-config docker-build docker-up docker-down smoke clean
+.PHONY: install test lint typecheck check compile ingest api worker worker-once docker-config docker-build docker-up docker-down smoke clean
 
-venv:
-	$(PYTHON) -m venv $(VENV)
-
-install: venv
-	$(PIP) install --upgrade pip
-	$(PIP) install -r requirements.txt
+# Mesmas versões do CI e da imagem Docker (uv.lock).
+install:
+	uv sync --locked
 
 test:
-	PYTHONPYCACHEPREFIX=/private/tmp/srag_pycache MPLCONFIGDIR=/private/tmp/srag_mplconfig $(VENV_PYTHON) -m pytest -q
+	uv run pytest -q
 
 lint:
-	$(VENV)/bin/ruff check .
+	uv run ruff check .
 
 typecheck:
-	$(VENV)/bin/mypy
+	uv run mypy
 
 # Os mesmos gates que o CI aplica.
 check: lint typecheck test
 
+compile:
+	uv run python -m compileall -q src main.py ingest.py worker.py
+
 ingest:
-	$(VENV_PYTHON) ingest.py
+	uv run python ingest.py
 
 api:
-	$(VENV)/bin/uvicorn api.app:app --host 0.0.0.0 --port 8000 --reload
+	uv run uvicorn api.app:app --host 0.0.0.0 --port 8000 --reload
 
 worker:
-	$(VENV_PYTHON) worker.py
+	uv run python worker.py
 
 worker-once:
-	$(VENV_PYTHON) worker.py --once
+	uv run python worker.py --once
 
 docker-config:
 	docker compose config

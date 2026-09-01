@@ -6,7 +6,15 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 
 ## Unreleased
 
+### Adicionado
+- `CONTRIBUTING.md` e Dependabot para `uv` e GitHub Actions (mensal, minor/patch agrupados).
+- `HEALTHCHECK` na imagem Docker, para `docker run` avulso; o compose já tinha o probe.
+
 ### Alterado
+- Builds reproduzíveis: `pyproject.toml` + `uv.lock` substituem `requirements.txt`,
+  `mypy.ini`, `ruff.toml` e `pytest.ini`. CI instala com `uv sync --locked` e a imagem
+  Docker usa o mesmo lockfile. `Makefile` e READMEs migram para `uv`.
+- Imagem Docker deixa de instalar `build-essential`: as dependências têm wheels para 3.11.
 - CI: `actions/checkout` v4 para v7 e `actions/setup-python` v5 para v7.
 - CI passa a bloquear em `ruff`, `mypy` e `pytest`, não apenas nos testes (#11).
 - README: seções de execução agrupadas e tabela de evidências levada para o inglês.
