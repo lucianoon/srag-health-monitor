@@ -129,6 +129,10 @@ mesmos guardrails de validação de conteúdo e anonimização de PII.
 make install
 ```
 
+O `make install` roda `uv sync --locked`: as versões vêm de `uv.lock`, então o
+ambiente local, o CI e a imagem Docker resolvem exatamente as mesmas
+dependências. Instale o [uv](https://docs.astral.sh/uv/) se ainda não tiver.
+
 Opcionalmente copie o arquivo de ambiente:
 
 ```bash
@@ -360,14 +364,15 @@ no CI) quanto com `unittest`:
 # via pytest (mesmo comando do CI)
 make test
 # ou
-pytest -q
+uv run pytest -q
 
 # via unittest — o -t . é necessário para que tests/__init__.py rode e
 # coloque src/ no sys.path antes dos módulos de teste
-python -m unittest discover -t . -s tests -p "test*.py"
+uv run python -m unittest discover -t . -s tests -p "test*.py"
 ```
 
-Os mesmos gates do CI: `ruff check .`, `mypy` e `pytest -q` (ou `make check`).
+Os mesmos gates do CI: `uv run ruff check .`, `uv run mypy` e `uv run pytest -q`
+(ou `make check`).
 
 Os testes são organizados por módulo do código:
 
