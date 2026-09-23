@@ -1,72 +1,93 @@
-graph TB
-    subgraph "Camada de Apresentação"
-        USER[👤 Usuário/Profissional de Saúde]
+flowchart TB
+    subgraph ENTRADA["Interfaces de entrada"]
+        CLI["CLI<br/>main.py"]
+        API["API FastAPI<br/>src/api/app.py<br/>X-API-Key opcional"]
+        WORKER["Worker<br/>worker.py + ReportWorker<br/>polling do job store"]
     end
-    
-    subgraph "Camada de Orquestração"
-        AGENT[🤖 Agente Orquestrador<br/>LangGraph + GPT-4.1-mini]
-        AUDIT[📋 Sistema de Auditoria<br/>Logging Estruturado]
-        GUARD[🛡️ Guardrails<br/>Validação e Segurança]
+
+    subgraph JOBS["Fila de jobs"]
+        JOBDB[("Job store SQLite<br/>jobs.db<br/>claim atômico BEGIN IMMEDIATE")]
     end
-    
-    subgraph "Camada de Ferramentas (Tools)"
-        DB_TOOL[🗄️ Database Query Tool<br/>Consulta de Métricas]
-        NEWS_TOOL[📰 News Search Tool<br/>Busca de Notícias]
-        CHART_TOOL[📊 Chart Generation Tool<br/>Geração de Gráficos]
+
+    subgraph APP["Camada de aplicação"]
+        PATHS["AppConfig.for_client_request<br/>resolve_within / ensure_within<br/>SRAG_DATA_DIR e SRAG_OUTPUT_DIR"]
+        SERVICE["GenerateReportService<br/>validação de saída, PII,<br/>auditoria"]
     end
-    
-    subgraph "Camada de Dados"
-        SQLITE[(💾 SQLite Database<br/>Casos de SRAG)]
-        NEWS_API[🌐 Fontes de Notícias<br/>Web/APIs]
-        CHARTS[📈 Gráficos PNG<br/>Matplotlib]
+
+    subgraph PIPE["Pipeline de relatório (blackboard)"]
+        ORCH["SRAGMultiAgentReportOrchestrator<br/>src/agents/report_pipeline.py"]
+        BB["ReportBlackboard<br/>src/services/report_blackboard.py<br/>etapas prontas rodam em paralelo"]
+        STATE[("Estado por etapa<br/>data/pipeline_state/execution_id.json")]
+        S1["collect_data"]
+        S2["collect_news"]
+        S3["analyze"]
+        S4["generate_charts"]
+        S5["write_report"]
     end
-    
-    subgraph "Camada de Processamento"
-        PROCESSOR[⚙️ Data Processor<br/>Pandas + NumPy]
-        DATASUS[📥 DATASUS CSV<br/>~265k registros]
+
+    subgraph AGENTES["Agentes e ferramentas"]
+        ING["SUSDataIngestionAgent<br/>DatabaseQueryTool + NewsSearchTool"]
+        EPI["EpidemiologyAnalysisAgent<br/>achados e nível de risco"]
+        WRITER["ReportWriterAgent<br/>ChartGenerationTool + LLM opcional"]
     end
-    
-    subgraph "Camada de Saída"
-        REPORT[📄 Relatório Markdown<br/>Análise Epidemiológica]
-        LOGS[📝 Logs de Auditoria<br/>JSONL]
+
+    subgraph DADOS["Dados e serviços externos"]
+        SRAGDB[("SQLite srag.db<br/>casos de SRAG")]
+        FEEDS["Feeds RSS<br/>Fiocruz, Agência Brasil"]
+        LLM["OpenAI via langchain-openai<br/>fallback determinístico"]
     end
-    
-    USER -->|Solicita Relatório| AGENT
-    
-    AGENT -->|Valida Entrada| GUARD
-    GUARD -->|OK| AGENT
-    
-    AGENT -->|Consulta Métricas| DB_TOOL
-    AGENT -->|Busca Notícias| NEWS_TOOL
-    AGENT -->|Gera Gráficos| CHART_TOOL
-    
-    DB_TOOL -->|Query SQL| SQLITE
-    NEWS_TOOL -->|HTTP Request| NEWS_API
-    CHART_TOOL -->|Matplotlib| CHARTS
-    
-    SQLITE -->|Retorna Dados| DB_TOOL
-    NEWS_API -->|Retorna Notícias| NEWS_TOOL
-    CHARTS -->|Retorna Path| CHART_TOOL
-    
-    DB_TOOL -->|Métricas| AGENT
-    NEWS_TOOL -->|Notícias| AGENT
-    CHART_TOOL -->|Gráficos| AGENT
-    
-    AGENT -->|Valida Saída| GUARD
-    GUARD -->|OK| AGENT
-    
-    AGENT -->|Compila| REPORT
-    AGENT -->|Registra Decisões| AUDIT
-    
-    AUDIT -->|Salva| LOGS
-    REPORT -->|Entrega| USER
-    
-    DATASUS -->|Processa| PROCESSOR
-    PROCESSOR -->|Carrega| SQLITE
-    
-    style AGENT fill:#4A90E2,stroke:#2E5C8A,color:#fff
-    style GUARD fill:#E74C3C,stroke:#C0392B,color:#fff
-    style AUDIT fill:#F39C12,stroke:#D68910,color:#fff
-    style SQLITE fill:#27AE60,stroke:#1E8449,color:#fff
+
+    subgraph INGESTAO["Ingestão offline"]
+        INGEST["ingest.py<br/>DataIngestionService"]
+        DATASUS["CSV OpenDATASUS<br/>SRAG_SUS_DATA_URL"]
+    end
+
+    subgraph SAIDA["Saídas"]
+        REPORT["Relatório Markdown + gráficos PNG<br/>SRAG_OUTPUT_DIR"]
+        LOGS["Logs de auditoria JSONL<br/>SRAG_LOG_DIR"]
+    end
+
+    API -->|"POST /reports cria job"| JOBDB
+    API -->|"POST /reports/id/retry<br/>reaproveita execution_id"| JOBDB
+    WORKER -->|"claim_next"| JOBDB
+    WORKER -->|"mark_succeeded / mark_failed"| JOBDB
+    API -->|"POST /reports/sync"| PATHS
+    WORKER --> PATHS
+    CLI --> SERVICE
+    PATHS --> SERVICE
+    SERVICE --> ORCH
+    ORCH --> BB
+    BB <-->|"persiste após cada onda<br/>retoma do ponto da falha"| STATE
+
+    BB --> S1
+    BB --> S2
+    S1 --> S3
+    S2 --> S3
+    S3 --> S4
+    S3 --> S5
+    S4 --> S5
+
+    S1 -.-> ING
+    S2 -.-> ING
+    S3 -.-> EPI
+    S4 -.-> WRITER
+    S5 -.-> WRITER
+
+    ING --> SRAGDB
+    ING --> FEEDS
+    WRITER --> LLM
+    WRITER --> REPORT
+    SERVICE --> LOGS
+    API -->|"GET /reports/id/artifact<br/>ensure_within SRAG_OUTPUT_DIR"| REPORT
+
+    DATASUS --> INGEST
+    INGEST --> SRAGDB
+
+    style BB fill:#4A90E2,stroke:#2E5C8A,color:#fff
+    style ORCH fill:#4A90E2,stroke:#2E5C8A,color:#fff
+    style STATE fill:#F39C12,stroke:#D68910,color:#fff
+    style JOBDB fill:#27AE60,stroke:#1E8449,color:#fff
+    style SRAGDB fill:#27AE60,stroke:#1E8449,color:#fff
+    style PATHS fill:#E74C3C,stroke:#C0392B,color:#fff
+    style SERVICE fill:#E74C3C,stroke:#C0392B,color:#fff
     style REPORT fill:#9B59B6,stroke:#7D3C98,color:#fff
-    style USER fill:#34495E,stroke:#2C3E50,color:#fff
