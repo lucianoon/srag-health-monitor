@@ -8,6 +8,7 @@ from unittest import mock
 
 from services.job_store import InMemoryJobStore, JobStatus
 from tests.conftest import offline_news_guard  # também garante src/ no sys.path
+from tests.test_config import UNSAFE_PATHS
 
 # Mantém o módulo offline: POST /reports/sync executa o pipeline completo,
 # incluindo a coleta de notícias.
@@ -46,14 +47,10 @@ class TestApi(unittest.TestCase):
         self.assertIn("srag_db_exists", body)
 
     def test_create_report_job_returns_status_url(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            response = self.client.post(
-                "/reports",
-                json={
-                    "db_path": str(Path(tmpdir) / "missing.db"),
-                    "output_dir": str(Path(tmpdir) / "reports"),
-                },
-            )
+        response = self.client.post(
+            "/reports",
+            json={"db_path": "missing.db", "output_dir": "equipe-a"},
+        )
 
         self.assertEqual(response.status_code, 202)
         body = response.json()
@@ -63,6 +60,49 @@ class TestApi(unittest.TestCase):
         status_response = self.client.get(body["status_url"])
         self.assertEqual(status_response.status_code, 200)
         self.assertEqual(status_response.json()["status"], "queued")
+
+    def test_create_report_job_rejects_path_traversal(self):
+        for field in ("db_path", "output_dir"):
+            for value in UNSAFE_PATHS:
+                with self.subTest(field=field, value=value):
+                    response = self.client.post("/reports", json={field: value})
+                    self.assertEqual(response.status_code, 422)
+
+        self.assertEqual(self.store.list_recent(), [])
+
+    def test_create_report_job_rejects_symlink_escaping_data_dir(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir) / "data"
+            data_dir.mkdir()
+            outside = Path(tmpdir) / "fora"
+            outside.mkdir()
+            try:
+                (data_dir / "atalho").symlink_to(outside, target_is_directory=True)
+            except (OSError, NotImplementedError) as exc:
+                self.skipTest(f"symlink indisponível neste ambiente: {exc}")
+
+            with mock.patch.dict(os.environ, {"SRAG_DATA_DIR": str(data_dir)}, clear=False):
+                response = self.client.post("/reports", json={"db_path": "atalho/srag.db"})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(self.store.list_recent(), [])
+
+    def test_sync_report_rejects_path_traversal_without_touching_disk(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            reports_dir = Path(tmpdir) / "base" / "reports"
+            env = {
+                "SRAG_DATA_DIR": str(Path(tmpdir) / "base" / "data"),
+                "SRAG_OUTPUT_DIR": str(reports_dir),
+            }
+            with mock.patch.dict(os.environ, env, clear=False):
+                response = self.client.post(
+                    "/reports/sync",
+                    json={"output_dir": "../../escapou"},
+                )
+
+            self.assertFalse((Path(tmpdir) / "escapou").exists())
+
+        self.assertEqual(response.status_code, 422)
 
     def test_list_report_jobs_endpoint(self):
         self.store.create()
@@ -168,14 +208,18 @@ class TestApi(unittest.TestCase):
     def test_sync_report_returns_500_when_database_is_missing(self):
         with (
             tempfile.TemporaryDirectory() as tmpdir,
-            mock.patch.dict(os.environ, {"SRAG_DATA_DIR": tmpdir}, clear=False),
+            mock.patch.dict(
+                os.environ,
+                {
+                    "SRAG_DATA_DIR": tmpdir,
+                    "SRAG_OUTPUT_DIR": str(Path(tmpdir) / "reports"),
+                },
+                clear=False,
+            ),
         ):
             response = self.client.post(
                 "/reports/sync",
-                json={
-                    "db_path": str(Path(tmpdir) / "missing.db"),
-                    "output_dir": str(Path(tmpdir) / "reports"),
-                },
+                json={"db_path": "missing.db"},
             )
 
         self.assertEqual(response.status_code, 500)

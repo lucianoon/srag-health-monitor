@@ -248,10 +248,18 @@ Payload opcional:
 ```json
 {
   "model": "gpt-4.1-mini",
-  "db_path": "data/srag.db",
-  "output_dir": "outputs/reports"
+  "db_path": "srag.db",
+  "output_dir": "equipe-a"
 }
 ```
+
+Os caminhos nunca são caminhos do servidor: `db_path` é relativo a
+`SRAG_DATA_DIR` e `output_dir` é um subdiretório de `SRAG_OUTPUT_DIR`.
+Caminhos absolutos (POSIX, Windows ou UNC), segmentos `..` e byte nulo são
+rejeitados com `422`; um symlink dentro da base que aponte para fora dela é
+rejeitado com `400`. O worker aplica a mesma validação ao executar o job
+(inclusive jobs antigos e re-tentativas), marcando-o como `failed`. O mesmo
+vale para `POST /reports/sync`.
 
 Resposta:
 

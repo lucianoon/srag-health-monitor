@@ -8,8 +8,8 @@ um ambiente específico. Variáveis de ambiente continuam tendo precedência.
 import json
 import logging
 import os
-from dataclasses import dataclass, field
-from pathlib import Path
+from dataclasses import dataclass, field, replace
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
@@ -54,6 +54,50 @@ def _parse_news_feeds(raw: str | None) -> list[dict]:
         logger.warning("SRAG_NEWS_FEEDS sem entradas válidas; usando feeds padrão")
         return [dict(feed) for feed in DEFAULT_NEWS_FEEDS]
     return feeds
+
+
+class UnsafePathError(ValueError):
+    """Caminho vindo de cliente que escaparia do diretório base do servidor."""
+
+
+def check_relative_path(value: str) -> str:
+    """Validação sintática de um caminho vindo de cliente.
+
+    Aceita apenas caminhos relativos, sem ``..``, sem raiz, drive ou UNC
+    (em qualquer convenção de separador) e sem byte nulo. Não toca o
+    sistema de arquivos; a contenção real é feita por ``resolve_within``.
+    """
+    if not isinstance(value, str) or not value.strip():
+        raise UnsafePathError("caminho vazio ou inválido não é aceito")
+    if "\x00" in value:
+        raise UnsafePathError("caminho com byte nulo não é aceito")
+
+    normalized = value.replace("\\", "/")
+    windows_path = PureWindowsPath(value)
+    if (
+        PurePosixPath(normalized).is_absolute()
+        or windows_path.drive
+        or windows_path.root
+    ):
+        raise UnsafePathError("caminhos absolutos não são aceitos")
+    if ".." in PurePosixPath(normalized).parts:
+        raise UnsafePathError("segmentos '..' não são aceitos")
+    return value
+
+
+def resolve_within(base: str | Path, value: str) -> Path:
+    """Resolve ``value`` relativo a ``base`` garantindo que fique dentro dela.
+
+    Além da checagem sintática, o caminho é resolvido (seguindo symlinks
+    existentes) e comparado com a base resolvida: um symlink dentro da base
+    que aponte para fora dela também é rejeitado.
+    """
+    check_relative_path(value)
+    base_resolved = Path(base).resolve()
+    candidate = (base_resolved / value.replace("\\", "/")).resolve()
+    if not candidate.is_relative_to(base_resolved):
+        raise UnsafePathError("caminho fora do diretório base permitido")
+    return candidate
 
 
 @dataclass(frozen=True)
@@ -121,6 +165,38 @@ class AppConfig:
             sus_data_url=os.getenv("SRAG_SUS_DATA_URL"),
             sus_ingest_nrows=cls._optional_int(os.getenv("SRAG_SUS_INGEST_NROWS")),
             news_feeds=_parse_news_feeds(os.getenv("SRAG_NEWS_FEEDS")),
+        )
+
+    @classmethod
+    def for_client_request(
+        cls,
+        *,
+        model_name: str | None = None,
+        output_dir: str | None = None,
+        db_path: str | None = None,
+    ) -> "AppConfig":
+        """Cria configuração a partir de parâmetros vindos de clientes (API/jobs).
+
+        Diferente de ``from_env`` (usado pela CLI, que é confiável), os
+        caminhos aqui ficam presos aos diretórios base definidos pelo
+        servidor: ``db_path`` é relativo a ``data_dir`` (``SRAG_DATA_DIR``) e
+        ``output_dir`` é um subdiretório de ``reports_dir``
+        (``SRAG_OUTPUT_DIR``). Caminhos absolutos, ``..`` e symlinks para
+        fora da base levantam ``UnsafePathError``.
+        """
+        base = cls.from_env(model_name=model_name)
+        return replace(
+            base,
+            db_path=(
+                resolve_within(base.data_dir, db_path)
+                if db_path is not None
+                else base.db_path
+            ),
+            reports_dir=(
+                resolve_within(base.reports_dir, output_dir)
+                if output_dir is not None
+                else base.reports_dir
+            ),
         )
 
     def ensure_runtime_dirs(self) -> None:

@@ -254,10 +254,17 @@ Optional payload:
 ```json
 {
   "model": "gpt-4.1-mini",
-  "db_path": "data/srag.db",
-  "output_dir": "outputs/reports"
+  "db_path": "srag.db",
+  "output_dir": "team-a"
 }
 ```
+
+Paths are never server paths: `db_path` is relative to `SRAG_DATA_DIR` and
+`output_dir` is a subdirectory of `SRAG_OUTPUT_DIR`. Absolute paths (POSIX,
+Windows or UNC), `..` segments and null bytes are rejected with `422`; a
+symlink inside the base that points outside it is rejected with `400`. The
+worker applies the same validation when running the job (including older jobs
+and retries), marking it as `failed`. The same applies to `POST /reports/sync`.
 
 Response:
 

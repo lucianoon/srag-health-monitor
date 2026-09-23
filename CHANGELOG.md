@@ -26,6 +26,9 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
   com ano 2024 fixo e manipulação de `sys.path`. O pipeline em uso é `agents/report_pipeline.py`.
 
 ### Segurança
+- API: `db_path` e `output_dir` deixam de aceitar caminhos arbitrários do cliente.
+  Passam a ser relativos a `SRAG_DATA_DIR` / `SRAG_OUTPUT_DIR`; absolutos, `..` e
+  symlinks para fora da base são rejeitados na API e de novo no worker.
 - Política de reporte de vulnerabilidades em `SECURITY.md`.
 - Atualização de dependências mantida dentro dos runtimes suportados.
 - Atualização automática de versões pelo Dependabot desativada; bumps passam por revisão manual.
