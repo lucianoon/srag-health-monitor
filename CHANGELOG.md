@@ -21,6 +21,10 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 - README em português volta a ser o principal; a versão em inglês fica em `README.en.md`.
 - Documentação expõe evidências operacionais e um relatório de exemplo em `docs/exemplo/`.
 
+### Removido
+- `src/agents/orchestrator.py`: orquestrador legado (LangGraph) sem nenhum import,
+  com ano 2024 fixo e manipulação de `sys.path`. O pipeline em uso é `agents/report_pipeline.py`.
+
 ### Segurança
 - Política de reporte de vulnerabilidades em `SECURITY.md`.
 - Atualização de dependências mantida dentro dos runtimes suportados.
