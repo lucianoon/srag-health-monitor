@@ -1,9 +1,11 @@
 """Testes dos stores de jobs (src/services/job_store.py)."""
 
+import sqlite3
 import tempfile
 import threading
 import unittest
 from concurrent.futures import ProcessPoolExecutor
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import tests.conftest  # noqa: F401  garante src/ no sys.path
@@ -202,6 +204,204 @@ class TestJobStore(unittest.TestCase):
         self.assertEqual(counts[JobStatus.QUEUED], 1)
         self.assertEqual(counts[JobStatus.FAILED], 1)
         self.assertEqual(counts[JobStatus.RUNNING], 0)
+
+
+class FakeClock:
+    """Relógio controlável: o lease é testado sem ``sleep``."""
+
+    def __init__(self, start: datetime | None = None):
+        self.now = start or datetime(2026, 1, 1, 12, 0, 0)
+
+    def __call__(self) -> datetime:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += timedelta(seconds=seconds)
+
+
+class TestJobLease(unittest.TestCase):
+    """Lease com heartbeat e recuperação de jobs órfãos (worker caiu)."""
+
+    def setUp(self):
+        tmpdir = tempfile.TemporaryDirectory()
+        self.addCleanup(tmpdir.cleanup)
+        self.db_path = Path(tmpdir.name) / "jobs.db"
+        self.clock = FakeClock()
+
+    def _store(self, **kwargs) -> SQLiteJobStore:
+        kwargs.setdefault("lease_seconds", 60)
+        kwargs.setdefault("max_attempts", 3)
+        return SQLiteJobStore(self.db_path, clock=self.clock, **kwargs)
+
+    def test_claim_sets_lease_and_counts_attempt(self):
+        store = self._store()
+        job = store.create()
+
+        claimed = store.claim_next()
+
+        self.assertEqual(claimed.job_id, job.job_id)
+        self.assertEqual(claimed.attempts, 1)
+        self.assertIsNotNone(claimed.lease_owner)
+        self.assertEqual(claimed.lease_expires_at, self.clock.now + timedelta(seconds=60))
+
+    def test_expired_lease_is_reclaimed_with_same_execution_id(self):
+        crashed_worker = self._store()
+        job = crashed_worker.create(payload={"db_path": "srag.db"})
+        first = crashed_worker.claim_next()
+        crashed_worker.set_execution_id(job.job_id, "exec-orfao")
+        # O worker cai: nenhum heartbeat, o lease vence.
+        self.clock.advance(61)
+
+        recovered = self._store().claim_next()
+
+        self.assertEqual(recovered.job_id, job.job_id)
+        self.assertEqual(recovered.status, JobStatus.RUNNING)
+        self.assertEqual(recovered.attempts, 2)
+        self.assertEqual(recovered.execution_id, "exec-orfao")
+        self.assertEqual(recovered.payload, {"db_path": "srag.db"})
+        self.assertNotEqual(recovered.lease_owner, first.lease_owner)
+        # O dono antigo perdeu o lease: não consegue mais renová-lo.
+        self.assertFalse(crashed_worker.heartbeat(job.job_id, first.lease_owner))
+
+    def test_valid_lease_is_not_stolen(self):
+        owner = self._store()
+        owner.create()
+        owner.claim_next()
+        self.clock.advance(59)
+
+        self.assertIsNone(self._store().claim_next())
+        self.assertEqual(owner.status_counts()[JobStatus.RUNNING], 1)
+
+    def test_queued_job_is_claimed_while_other_lease_is_valid(self):
+        store = self._store()
+        running = store.create()
+        store.claim_next()
+        self.clock.advance(1)
+        queued = store.create()
+
+        claimed = self._store().claim_next()
+
+        self.assertEqual(claimed.job_id, queued.job_id)
+        self.assertEqual(store.get(running.job_id).attempts, 1)
+
+    def test_heartbeat_renews_lease(self):
+        store = self._store()
+        store.create()
+        claimed = store.claim_next()
+
+        self.clock.advance(50)
+        self.assertTrue(store.heartbeat(claimed.job_id, claimed.lease_owner))
+        renewed = store.get(claimed.job_id)
+        self.assertEqual(renewed.lease_expires_at, self.clock.now + timedelta(seconds=60))
+
+        # Sem o heartbeat o lease teria vencido em t0+60; renovado, vale
+        # até t0+110.
+        self.clock.advance(20)
+        self.assertIsNone(self._store().claim_next())
+        self.clock.advance(41)
+        self.assertEqual(self._store().claim_next().job_id, claimed.job_id)
+
+    def test_heartbeat_rejects_foreign_owner_and_finished_jobs(self):
+        store = self._store()
+        job = store.create()
+        claimed = store.claim_next()
+
+        self.assertFalse(store.heartbeat(job.job_id, "outro-worker"))
+        store.mark_failed(job.job_id, "boom")
+        self.assertFalse(store.heartbeat(job.job_id, claimed.lease_owner))
+        self.assertIsNone(store.get(job.job_id).lease_owner)
+
+    def test_attempt_limit_marks_job_failed(self):
+        store = self._store(max_attempts=2)
+        job = store.create()
+        for _ in range(2):
+            self.assertEqual(store.claim_next().job_id, job.job_id)
+            self.clock.advance(61)
+
+        self.assertIsNone(store.claim_next())
+
+        failed = store.get(job.job_id)
+        self.assertEqual(failed.status, JobStatus.FAILED)
+        self.assertEqual(failed.attempts, 2)
+        self.assertIn("Lease expirado", failed.error)
+        self.assertIn("limite de 2", failed.error)
+        self.assertIsNone(failed.lease_owner)
+
+    def test_attempt_limit_does_not_block_other_jobs(self):
+        store = self._store(max_attempts=1)
+        orphan = store.create()
+        store.claim_next()
+        self.clock.advance(61)
+        queued = store.create()
+
+        self.assertEqual(store.claim_next().job_id, queued.job_id)
+        self.assertEqual(store.get(orphan.job_id).status, JobStatus.FAILED)
+
+    def test_legacy_database_is_migrated_and_orphans_recovered(self):
+        # Banco criado antes do lease: sem as colunas novas e com um job
+        # preso em running por um worker que caiu.
+        conn = sqlite3.connect(self.db_path)
+        try:
+            with conn:
+                conn.execute(
+                    """
+                    CREATE TABLE report_jobs (
+                        job_id TEXT PRIMARY KEY,
+                        status TEXT NOT NULL,
+                        created_at TEXT NOT NULL,
+                        updated_at TEXT NOT NULL,
+                        execution_id TEXT,
+                        report_path TEXT,
+                        duration_ms REAL,
+                        pii_detected INTEGER NOT NULL DEFAULT 0,
+                        pii_types TEXT NOT NULL DEFAULT '[]',
+                        summary TEXT,
+                        error TEXT
+                    )
+                    """
+                )
+                conn.execute(
+                    "INSERT INTO report_jobs (job_id, status, created_at, updated_at,"
+                    " execution_id) VALUES ('legado', 'running', ?, ?, 'exec-legado')",
+                    ("2025-12-31T10:00:00", "2025-12-31T10:00:00"),
+                )
+        finally:
+            conn.close()
+
+        store = self._store()
+
+        conn = sqlite3.connect(self.db_path)
+        try:
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(report_jobs)")}
+        finally:
+            conn.close()
+        self.assertTrue(
+            {"payload", "attempts", "lease_owner", "lease_expires_at"} <= columns
+        )
+
+        recovered = store.claim_next()
+        self.assertEqual(recovered.job_id, "legado")
+        self.assertEqual(recovered.execution_id, "exec-legado")
+        self.assertEqual(recovered.attempts, 1)
+        self.assertEqual(recovered.payload, {})
+
+    def test_in_memory_store_follows_same_lease_rules(self):
+        store = InMemoryJobStore(lease_seconds=60, max_attempts=2, clock=self.clock)
+        job = store.create()
+        first = store.claim_next()
+
+        self.clock.advance(59)
+        self.assertIsNone(store.claim_next())
+        self.assertTrue(store.heartbeat(job.job_id, first.lease_owner))
+
+        self.clock.advance(61)
+        second = store.claim_next()
+        self.assertEqual(second.attempts, 2)
+        self.assertFalse(store.heartbeat(job.job_id, "dono-antigo"))
+
+        self.clock.advance(61)
+        self.assertIsNone(store.claim_next())
+        self.assertEqual(store.get(job.job_id).status, JobStatus.FAILED)
 
 
 if __name__ == "__main__":

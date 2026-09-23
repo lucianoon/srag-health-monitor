@@ -51,6 +51,13 @@ jobs:
       - name: Build image
         run: docker compose build
 
+      - name: Prepare bind mounts for the non-root user
+        # O container roda como uid 10001; os diretórios montados do host
+        # precisam ser graváveis por ele (ver README, seção Docker).
+        run: |
+          mkdir -p data outputs/reports outputs/logs
+          sudo chown -R 10001:10001 data outputs
+
       - name: Start API
         run: docker compose up -d api
 
@@ -58,6 +65,9 @@ jobs:
         run: |
           for i in {1..30}; do
             if curl -fsS http://localhost:8000/health; then
+              uid="$(docker compose exec -T api id -u)"
+              echo "API uid: $uid"
+              test "$uid" != "0"
               exit 0
             fi
             sleep 2

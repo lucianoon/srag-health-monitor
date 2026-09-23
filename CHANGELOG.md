@@ -7,12 +7,20 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 ## Unreleased
 
 ### Adicionado
+- Lease com heartbeat para jobs em execução: um job cujo worker caiu volta a ser
+  reivindicado por `claim_next` quando o lease expira, retomando do blackboard pelo
+  mesmo `execution_id`; após `SRAG_JOB_MAX_ATTEMPTS` tentativas vira `failed` com erro
+  explícito. Migração automática do banco de jobs (`attempts`, `lease_owner`,
+  `lease_expires_at`).
 - `CONTRIBUTING.md` e Dependabot para `uv` e GitHub Actions (mensal, minor/patch agrupados).
 - `HEALTHCHECK` na imagem Docker, para `docker run` avulso; o compose já tinha o probe.
 - README: seção de limitações epidemiológicas (sem nowcasting, denominadores,
   limiares heurísticos).
 
 ### Alterado
+- A imagem Docker roda como usuário sem root (`app`, uid/gid 10001), com HOME e
+  diretórios de dados/saída graváveis; o CI confirma que a API não roda como root.
+- READMEs deixam de citar uma contagem fixa de testes.
 - Builds reproduzíveis: `pyproject.toml` + `uv.lock` substituem `requirements.txt`,
   `mypy.ini`, `ruff.toml` e `pytest.ini`. CI instala com `uv sync --locked` e a imagem
   Docker usa o mesmo lockfile. `Makefile` e READMEs migram para `uv`.

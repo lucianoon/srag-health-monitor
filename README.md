@@ -18,9 +18,9 @@ guardrails e geração de gráficos.
 
 | Evidência | O que demonstra |
 |---|---|
-| 89 testes offline | Pipeline, API, worker, retry, guardrails e ingestão |
+| Suíte de testes offline no CI | Pipeline, API, worker, lease/recuperação, retry, guardrails e ingestão |
 | Dados DATASUS/SIVEP-Gripe | Aplicação em um domínio público brasileiro real |
-| Jobs retomáveis por etapa | Resiliência sem repetir trabalho concluído |
+| Jobs retomáveis por etapa | Resiliência sem repetir trabalho concluído, inclusive se o worker cair |
 | Relatório e gráfico versionados | Saída verificável antes de instalar o projeto |
 | Auditoria, anonimização de PII e validações | Segurança e governança explícitas |
 | API + worker em Docker Compose | Separação operacional dos serviços |
@@ -30,7 +30,8 @@ guardrails e geração de gráficos.
 O projeto evoluiu de uma PoC para uma base de produto operável:
 
 - API FastAPI para criar e consultar jobs de relatório.
-- Worker separado para executar jobs pendentes.
+- Worker separado para executar jobs pendentes, com lease + heartbeat que
+  recupera jobs órfãos quando um worker cai.
 - Pipeline multiagente: ingestão SUS, análise epidemiológica e escrita de relatório.
 - Persistência de jobs em SQLite.
 - Banco SRAG em SQLite.
@@ -204,6 +205,19 @@ Parar:
 make docker-down
 ```
 
+A imagem roda como usuário sem privilégios (`app`, uid/gid `10001`). Em
+Linux, os diretórios montados do host (`./data` e `./outputs`) precisam ser
+graváveis por esse uid:
+
+```bash
+mkdir -p data outputs/reports outputs/logs
+sudo chown -R 10001:10001 data outputs
+```
+
+Para outro uid, reconstrua com `docker compose build --build-arg APP_UID=$(id -u)
+--build-arg APP_GID=$(id -g)`. No Docker Desktop (macOS/Windows) o ajuste
+costuma ser desnecessário.
+
 ### Validação
 
 ```bash
@@ -281,6 +295,24 @@ Estados possíveis:
 - `running`
 - `succeeded`
 - `failed`
+
+#### Lease e recuperação de jobs órfãos
+
+Ao reservar um job, o worker recebe um *lease* (`lease_owner` +
+`lease_expires_at`, padrão de 60 s) e uma thread de heartbeat o renova a cada
+terço do lease enquanto o job executa. Se o worker cai, o heartbeat para e o
+lease expira; o próximo `claim_next` (de qualquer worker) reivindica o job de
+novo, na mesma transação `BEGIN IMMEDIATE` que reserva jobs `queued`. A nova
+tentativa reaproveita o `execution_id` gravado no job e retoma do blackboard,
+sem refazer etapas concluídas. Um lease válido nunca é tomado de outro worker,
+e um worker que perdeu o lease não consegue mais renová-lo.
+
+Cada reserva conta uma tentativa (`attempts`). Um job cujo lease expira depois
+de `SRAG_JOB_MAX_ATTEMPTS` tentativas (padrão 3) vira `failed` com erro
+explícito ("Lease expirado sem heartbeat...") e pode ser reenviado por
+`POST /reports/{job_id}/retry`. Bancos de jobs antigos ganham as colunas
+novas automaticamente (`ALTER TABLE ... ADD COLUMN`), e jobs presos em
+`running` por versões anteriores são tratados como órfãos.
 
 ### `POST /reports/{job_id}/retry`
 
@@ -361,11 +393,13 @@ make worker-once
 | `SRAG_MODEL` | `gpt-4.1-mini` | modelo configurado |
 | `SRAG_SUS_DATA_URL` | vazio | URL do recurso CSV SRAG no portal oficial |
 | `SRAG_SUS_INGEST_NROWS` | vazio | limite opcional de linhas para smoke tests |
+| `SRAG_JOB_LEASE_SECONDS` | `60` | duração do lease de um job em execução (heartbeat a cada 1/3) |
+| `SRAG_JOB_MAX_ATTEMPTS` | `3` | tentativas antes de um job órfão virar `failed` |
 | `SRAG_NEWS_FEEDS` | vazio | JSON opcional para sobrescrever os feeds RSS de notícias |
 
 ## Testes
 
-A suíte tem **89 testes**, todos offline e determinísticos: nenhum teste faz
+Todos os testes da suíte são offline e determinísticos: nenhum teste faz
 chamada de rede nem exige chaves de API (o fetch de notícias é desabilitado e
 a narrativa usa o fallback determinístico). Roda tanto com `pytest` (usado
 no CI) quanto com `unittest`:
@@ -398,7 +432,7 @@ tests/
   test_report_service.py  # caso de uso de geração de relatório
   test_data_ingestion.py  # ingestão do CSV oficial para o cache SQLite
   test_job_store.py       # stores de jobs (memória e SQLite)
-  test_worker.py          # worker assíncrono, incluindo retry com retomada
+  test_worker.py          # worker assíncrono, retry e recuperação de órfãos
   test_api.py             # endpoints HTTP (jobs, retry, artifact, métricas)
 ```
 

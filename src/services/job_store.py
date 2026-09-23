@@ -2,15 +2,29 @@
 
 import json
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
 from threading import Lock
 from typing import Protocol
 from uuid import uuid4
+
+DEFAULT_LEASE_SECONDS = 60.0
+"""Duração do lease de um job em execução, renovado pelo heartbeat do worker."""
+
+DEFAULT_MAX_ATTEMPTS = 3
+"""Quantas vezes um job pode ser reivindicado antes de ser dado como falho."""
+
+
+def _lease_exhausted_error(attempts: int, max_attempts: int) -> str:
+    return (
+        f"Lease expirado sem heartbeat após {attempts} tentativa(s) "
+        f"(limite de {max_attempts}): o worker provavelmente caiu durante a "
+        "execução. Use POST /reports/{job_id}/retry para tentar de novo."
+    )
 
 
 class JobStatus(str, Enum):
@@ -38,6 +52,9 @@ class ReportJob:
     summary: dict | None = None
     error: str | None = None
     payload: dict = field(default_factory=dict)
+    attempts: int = 0
+    lease_owner: str | None = None
+    lease_expires_at: datetime | None = None
 
 
 class JobStore(Protocol):
@@ -72,7 +89,10 @@ class JobStore(Protocol):
         """Marca o job como falho."""
 
     def claim_next(self) -> ReportJob | None:
-        """Reserva o próximo job pendente para execução."""
+        """Reserva o próximo job pendente (ou órfão com lease expirado)."""
+
+    def heartbeat(self, job_id: str, lease_owner: str) -> bool:
+        """Renova o lease do job; ``False`` se o lease não é mais deste dono."""
 
     def list_recent(
         self,
@@ -92,9 +112,18 @@ class InMemoryJobStore:
     implementada com Redis, Postgres ou um backend de filas.
     """
 
-    def __init__(self):
+    def __init__(
+        self,
+        *,
+        lease_seconds: float = DEFAULT_LEASE_SECONDS,
+        max_attempts: int = DEFAULT_MAX_ATTEMPTS,
+        clock: Callable[[], datetime] = datetime.now,
+    ):
         self._jobs: dict[str, ReportJob] = {}
         self._lock = Lock()
+        self.lease_seconds = lease_seconds
+        self.max_attempts = max_attempts
+        self._clock = clock
 
     def create(self, payload: dict | None = None) -> ReportJob:
         """Cria um job pendente."""
@@ -145,25 +174,66 @@ class InMemoryJobStore:
             pii_types=pii_types,
             summary=summary,
             error=None,
+            lease_owner=None,
+            lease_expires_at=None,
         )
 
     def mark_failed(self, job_id: str, error: str) -> None:
         """Marca o job como falho."""
-        self._update(job_id, status=JobStatus.FAILED, error=error)
+        self._update(
+            job_id,
+            status=JobStatus.FAILED,
+            error=error,
+            lease_owner=None,
+            lease_expires_at=None,
+        )
 
     def claim_next(self) -> ReportJob | None:
-        """Reserva o próximo job pendente para execução."""
+        """Reserva o próximo job pendente ou órfão (mesma regra do SQLite)."""
         with self._lock:
-            queued_jobs = [
+            now = self._clock()
+
+            def expired(job: ReportJob) -> bool:
+                return job.status == JobStatus.RUNNING and (
+                    job.lease_expires_at is None or job.lease_expires_at <= now
+                )
+
+            for job in self._jobs.values():
+                if expired(job) and job.attempts >= self.max_attempts:
+                    job.status = JobStatus.FAILED
+                    job.error = _lease_exhausted_error(job.attempts, self.max_attempts)
+                    job.lease_owner = None
+                    job.lease_expires_at = None
+                    job.updated_at = now
+
+            candidates = [
                 job for job in self._jobs.values()
-                if job.status == JobStatus.QUEUED
+                if job.status == JobStatus.QUEUED or expired(job)
             ]
-            if not queued_jobs:
+            if not candidates:
                 return None
-            job = sorted(queued_jobs, key=lambda item: item.created_at)[0]
+            job = sorted(candidates, key=lambda item: item.created_at)[0]
             job.status = JobStatus.RUNNING
-            job.updated_at = datetime.now()
+            job.attempts += 1
+            job.lease_owner = str(uuid4())
+            job.lease_expires_at = now + timedelta(seconds=self.lease_seconds)
+            job.updated_at = now
             return job
+
+    def heartbeat(self, job_id: str, lease_owner: str) -> bool:
+        """Renova o lease do job se ele ainda pertence a ``lease_owner``."""
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if (
+                job is None
+                or job.status != JobStatus.RUNNING
+                or job.lease_owner != lease_owner
+            ):
+                return False
+            now = self._clock()
+            job.lease_expires_at = now + timedelta(seconds=self.lease_seconds)
+            job.updated_at = now
+            return True
 
     def list_recent(
         self,
@@ -198,11 +268,33 @@ class InMemoryJobStore:
 
 
 class SQLiteJobStore:
-    """Store persistente de jobs em SQLite."""
+    """Store persistente de jobs em SQLite.
 
-    def __init__(self, db_path: str | Path):
+    Jobs em execução carregam um *lease* (``lease_owner`` +
+    ``lease_expires_at``) que o worker renova com :meth:`heartbeat`. Se o
+    worker cai, o heartbeat para, o lease expira e o próximo
+    :meth:`claim_next` reivindica o job de novo (mesmo ``execution_id``,
+    retomando do blackboard). Cada reivindicação conta uma tentativa; ao
+    atingir ``max_attempts`` com o lease expirado, o job vira ``failed``.
+    """
+
+    def __init__(
+        self,
+        db_path: str | Path,
+        *,
+        lease_seconds: float = DEFAULT_LEASE_SECONDS,
+        max_attempts: int = DEFAULT_MAX_ATTEMPTS,
+        clock: Callable[[], datetime] = datetime.now,
+    ):
+        if lease_seconds <= 0:
+            raise ValueError("lease_seconds deve ser positivo")
+        if max_attempts < 1:
+            raise ValueError("max_attempts deve ser >= 1")
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self.lease_seconds = lease_seconds
+        self.max_attempts = max_attempts
+        self._clock = clock
         self._lock = Lock()
         self._initialize()
 
@@ -275,48 +367,95 @@ class SQLiteJobStore:
             pii_types=json.dumps(pii_types),
             summary=json.dumps(summary),
             error=None,
+            lease_owner=None,
+            lease_expires_at=None,
         )
 
     def mark_failed(self, job_id: str, error: str) -> None:
         """Marca o job como falho."""
-        self._update(job_id, status=JobStatus.FAILED.value, error=error)
+        self._update(
+            job_id,
+            status=JobStatus.FAILED.value,
+            error=error,
+            lease_owner=None,
+            lease_expires_at=None,
+        )
 
     def claim_next(self) -> ReportJob | None:
-        """Reserva o próximo job pendente para execução.
+        """Reserva o próximo job pendente ou órfão para execução.
 
         O claim é atômico entre processos, não só entre threads: o ``Lock``
         protege apenas o processo atual. Por isso a reserva roda numa
         transação ``BEGIN IMMEDIATE`` (a trava de escrita do SQLite é obtida
         antes do SELECT, então dois workers não escolhem o mesmo job) e o
-        UPDATE só vale se o job ainda estiver ``queued``: ``rowcount``
-        diferente de 1 significa que o job não foi reservado por esta
-        chamada, e nada é devolvido (o worker tenta de novo no próximo poll).
+        UPDATE repete a condição de elegibilidade: ``rowcount`` diferente de
+        1 significa que o job não foi reservado por esta chamada, e nada é
+        devolvido (o worker tenta de novo no próximo poll).
+
+        São elegíveis jobs ``queued`` e jobs ``running`` cujo lease expirou
+        (ou que não têm lease: órfãos de versões anteriores à migração).
+        Antes da escolha, órfãos que já esgotaram ``max_attempts`` são
+        marcados ``failed`` com erro explícito, na mesma transação.
         """
         with self._lock, self._connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
+            now = self._clock()
+            now_iso = self._ts(now)
+            expired = (
+                "status = ? AND (lease_expires_at IS NULL OR lease_expires_at <= ?)"
+            )
+            expired_params = (JobStatus.RUNNING.value, now_iso)
+
+            exhausted = conn.execute(
+                f"SELECT job_id, attempts FROM report_jobs "
+                f"WHERE {expired} AND attempts >= ?",
+                (*expired_params, self.max_attempts),
+            ).fetchall()
+            for job in exhausted:
+                conn.execute(
+                    f"""
+                    UPDATE report_jobs
+                    SET status = ?, error = ?, lease_owner = NULL,
+                        lease_expires_at = NULL, updated_at = ?
+                    WHERE job_id = ? AND {expired}
+                    """,
+                    (
+                        JobStatus.FAILED.value,
+                        _lease_exhausted_error(job["attempts"], self.max_attempts),
+                        now_iso,
+                        job["job_id"],
+                        *expired_params,
+                    ),
+                )
+
+            eligible = f"(status = ? OR ({expired}))"
+            eligible_params = (JobStatus.QUEUED.value, *expired_params)
             row = conn.execute(
-                """
+                f"""
                 SELECT job_id FROM report_jobs
-                WHERE status = ?
+                WHERE {eligible}
                 ORDER BY created_at
                 LIMIT 1
                 """,
-                (JobStatus.QUEUED.value,),
+                eligible_params,
             ).fetchone()
             if row is None:
                 return None
 
             cursor = conn.execute(
-                """
+                f"""
                 UPDATE report_jobs
-                SET status = ?, updated_at = ?
-                WHERE job_id = ? AND status = ?
+                SET status = ?, attempts = attempts + 1, lease_owner = ?,
+                    lease_expires_at = ?, updated_at = ?
+                WHERE job_id = ? AND {eligible}
                 """,
                 (
                     JobStatus.RUNNING.value,
-                    datetime.now().isoformat(),
+                    str(uuid4()),
+                    self._ts(now + timedelta(seconds=self.lease_seconds)),
+                    now_iso,
                     row["job_id"],
-                    JobStatus.QUEUED.value,
+                    *eligible_params,
                 ),
             )
             if cursor.rowcount != 1:
@@ -328,6 +467,31 @@ class SQLiteJobStore:
             ).fetchone()
 
         return self._row_to_job(claimed)
+
+    def heartbeat(self, job_id: str, lease_owner: str) -> bool:
+        """Renova o lease do job se ele ainda pertence a ``lease_owner``.
+
+        Devolve ``False`` quando o job já não está ``running`` sob este dono
+        (lease expirado e reivindicado por outro worker, ou job finalizado):
+        o worker não deve estender um lease que perdeu.
+        """
+        now = self._clock()
+        with self._lock, self._connect() as conn:
+            cursor = conn.execute(
+                """
+                UPDATE report_jobs
+                SET lease_expires_at = ?, updated_at = ?
+                WHERE job_id = ? AND status = ? AND lease_owner = ?
+                """,
+                (
+                    self._ts(now + timedelta(seconds=self.lease_seconds)),
+                    self._ts(now),
+                    job_id,
+                    JobStatus.RUNNING.value,
+                    lease_owner,
+                ),
+            )
+            return cursor.rowcount == 1
 
     def list_recent(
         self,
@@ -380,7 +544,10 @@ class SQLiteJobStore:
                     pii_types TEXT NOT NULL DEFAULT '[]',
                     summary TEXT,
                     error TEXT,
-                    payload TEXT NOT NULL DEFAULT '{}'
+                    payload TEXT NOT NULL DEFAULT '{}',
+                    attempts INTEGER NOT NULL DEFAULT 0,
+                    lease_owner TEXT,
+                    lease_expires_at TEXT
                 )
                 """
             )
@@ -388,10 +555,17 @@ class SQLiteJobStore:
                 row["name"]
                 for row in conn.execute("PRAGMA table_info(report_jobs)").fetchall()
             }
-            if "payload" not in existing_columns:
-                conn.execute(
-                    "ALTER TABLE report_jobs ADD COLUMN payload TEXT NOT NULL DEFAULT '{}'"
-                )
+            # Migração aditiva: bancos criados por versões anteriores ganham
+            # as colunas que faltam, sem recriar a tabela.
+            migrations = {
+                "payload": "payload TEXT NOT NULL DEFAULT '{}'",
+                "attempts": "attempts INTEGER NOT NULL DEFAULT 0",
+                "lease_owner": "lease_owner TEXT",
+                "lease_expires_at": "lease_expires_at TEXT",
+            }
+            for column, definition in migrations.items():
+                if column not in existing_columns:
+                    conn.execute(f"ALTER TABLE report_jobs ADD COLUMN {definition}")
             conn.execute(
                 """
                 CREATE INDEX IF NOT EXISTS idx_report_jobs_status
@@ -415,8 +589,13 @@ class SQLiteJobStore:
         finally:
             conn.close()
 
+    @staticmethod
+    def _ts(value: datetime) -> str:
+        # Precisão fixa: as comparações de lease são feitas como texto no SQL.
+        return value.isoformat(timespec="microseconds")
+
     def _update(self, job_id: str, **changes) -> None:
-        changes["updated_at"] = datetime.now().isoformat()
+        changes["updated_at"] = self._ts(self._clock())
         columns = ", ".join(f"{key} = ?" for key in changes)
         values = list(changes.values()) + [job_id]
         with self._lock, self._connect() as conn:
@@ -440,4 +619,11 @@ class SQLiteJobStore:
             summary=json.loads(row["summary"]) if row["summary"] else None,
             error=row["error"],
             payload=json.loads(row["payload"] or "{}"),
+            attempts=row["attempts"],
+            lease_owner=row["lease_owner"],
+            lease_expires_at=(
+                datetime.fromisoformat(row["lease_expires_at"])
+                if row["lease_expires_at"]
+                else None
+            ),
         )
