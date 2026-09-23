@@ -138,6 +138,8 @@ class AppConfig:
     api_key: str | None = None
     sus_data_url: str | None = None
     sus_ingest_nrows: int | None = None
+    job_lease_seconds: float = 60.0
+    job_max_attempts: int = 3
     news_feeds: list[dict] = field(default_factory=lambda: [dict(f) for f in DEFAULT_NEWS_FEEDS])
 
     @classmethod
@@ -187,6 +189,8 @@ class AppConfig:
             api_key=os.getenv("SRAG_API_KEY"),
             sus_data_url=os.getenv("SRAG_SUS_DATA_URL"),
             sus_ingest_nrows=cls._optional_int(os.getenv("SRAG_SUS_INGEST_NROWS")),
+            job_lease_seconds=float(os.getenv("SRAG_JOB_LEASE_SECONDS") or 60.0),
+            job_max_attempts=int(os.getenv("SRAG_JOB_MAX_ATTEMPTS") or 3),
             news_feeds=_parse_news_feeds(os.getenv("SRAG_NEWS_FEEDS")),
         )
 

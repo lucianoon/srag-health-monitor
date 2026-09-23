@@ -103,7 +103,12 @@ app = FastAPI(
     version="0.1.0",
     description="API para geração de relatórios epidemiológicos de SRAG.",
 )
-job_store = SQLiteJobStore(AppConfig.from_env().jobs_db_path)
+_config = AppConfig.from_env()
+job_store = SQLiteJobStore(
+    _config.jobs_db_path,
+    lease_seconds=_config.job_lease_seconds,
+    max_attempts=_config.job_max_attempts,
+)
 
 
 @app.get("/health")

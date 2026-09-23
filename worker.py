@@ -31,7 +31,11 @@ def main():
 
     config = AppConfig.from_env()
     config.ensure_runtime_dirs()
-    store = SQLiteJobStore(config.jobs_db_path)
+    store = SQLiteJobStore(
+        config.jobs_db_path,
+        lease_seconds=config.job_lease_seconds,
+        max_attempts=config.job_max_attempts,
+    )
     worker = ReportWorker(store, poll_interval_seconds=args.poll_interval)
 
     if args.once:
