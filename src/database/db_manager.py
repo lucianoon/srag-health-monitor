@@ -179,12 +179,17 @@ class SRAGDatabase:
 
         return (obitos / total) * 100
 
-    def get_uti_occupation_rate(self) -> float:
+    def get_icu_admission_proportion(self) -> float:
         """
-        Calcula a taxa de ocupação de UTI.
+        Calcula a proporção de casos com internação em UTI.
+
+        É a fração dos casos notificados na base que tiveram internação em
+        UTI (``internou_uti``). Não é taxa de ocupação de leitos: a base não
+        tem capacidade instalada nem leitos disponíveis. Assim como a taxa de
+        mortalidade e a de vacinação, considera todos os casos carregados.
 
         Returns:
-            Taxa de ocupação de UTI em percentual
+            Proporção de casos com internação em UTI, em percentual
         """
         cursor = self._require_conn().cursor()
         cursor.execute("""
@@ -334,7 +339,7 @@ class SRAGDatabase:
         return {
             'taxa_aumento_casos': self.get_growth_rate(),
             'taxa_mortalidade': self.get_mortality_rate(),
-            'taxa_ocupacao_uti': self.get_uti_occupation_rate(),
+            'proporcao_casos_uti': self.get_icu_admission_proportion(),
             'taxa_vacinacao': self.get_vaccination_rate(),
             'total_casos': self.get_total_cases()
         }

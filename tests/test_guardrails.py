@@ -56,7 +56,7 @@ class TestOutputValidator(unittest.TestCase):
         metrics = {
             "taxa_aumento_casos": 5.0,
             "taxa_mortalidade": 7.5,
-            "taxa_ocupacao_uti": 25.0,
+            "proporcao_casos_uti": 25.0,
             "taxa_vacinacao": 50.0,
         }
         valid, _ = OutputValidator.validate_metrics(metrics)
@@ -66,7 +66,7 @@ class TestOutputValidator(unittest.TestCase):
         metrics = {
             "taxa_aumento_casos": 5.0,
             "taxa_mortalidade": 150.0,
-            "taxa_ocupacao_uti": 25.0,
+            "proporcao_casos_uti": 25.0,
             "taxa_vacinacao": 50.0,
         }
         valid, _ = OutputValidator.validate_metrics(metrics)
@@ -76,7 +76,7 @@ class TestOutputValidator(unittest.TestCase):
         metrics = {
             "taxa_aumento_casos": 5.0,
             "taxa_mortalidade": 7.5,
-            "taxa_ocupacao_uti": 25.0,
+            "proporcao_casos_uti": 25.0,
         }
         valid, message = OutputValidator.validate_metrics(metrics)
         self.assertFalse(valid)
@@ -87,7 +87,7 @@ class TestOutputValidator(unittest.TestCase):
         # Relatório de SRAG
         ## Métricas Principais
         Taxa de Mortalidade: 7.5%
-        Taxa de Ocupação de UTI: 25%
+        Proporção de Casos com Internação em UTI: 25%
         Taxa de Vacinação: 50%
         """
         valid, _ = OutputValidator.validate_report_content(report)
@@ -103,7 +103,7 @@ class TestOutputValidator(unittest.TestCase):
             "# Relatório de SRAG\n"
             "## Métricas Principais\n"
             "Taxa de Mortalidade: 7.5%\n"
-            "Taxa de Ocupação de UTI: 25%\n"
+            "Proporção de Casos com Internação em UTI: 25%\n"
         ) + "x" * 100
         valid, message = OutputValidator.validate_report_content(report)
         self.assertFalse(valid)

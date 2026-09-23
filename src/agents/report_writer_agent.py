@@ -131,6 +131,8 @@ class ReportWriterAgent:
             "- Use exclusivamente os dados fornecidos; não invente números, "
             "datas, locais nem fontes.\n"
             "- Não inclua dados pessoais de nenhum tipo.\n"
+            "- proporcao_casos_uti é a proporção de casos notificados com "
+            "internação em UTI; não a apresente como ocupação de leitos.\n"
             "- Escreva em português do Brasil, tom técnico e objetivo.\n"
             "- As recomendações devem ser acionáveis e coerentes com os achados "
             "e o nível de risco informados."
@@ -177,8 +179,8 @@ class ReportWriterAgent:
 ### 1.2 Taxa de Mortalidade
 **{metrics.get('taxa_mortalidade', 0):.2f}%** dos casos registrados resultaram em óbito.
 
-### 1.3 Taxa de Ocupação de UTI
-**{metrics.get('taxa_ocupacao_uti', 0):.2f}%** dos casos necessitaram de internação em UTI.
+### 1.3 Proporção de Casos com Internação em UTI
+**{metrics.get('proporcao_casos_uti', 0):.2f}%** dos casos registrados tiveram internação em UTI (proporção entre casos notificados; não é taxa de ocupação de leitos).
 
 ### 1.4 Taxa de Vacinação
 **{metrics.get('taxa_vacinacao', 0):.2f}%** dos pacientes registrados possuíam vacinação prévia.
@@ -272,13 +274,17 @@ Com base nos dados mais recentes do DATASUS, foram registrados **{metrics.get('t
                 "- A taxa de mortalidade está **dentro da faixa esperada** para SRAG."
             )
 
-        if metrics.get("taxa_ocupacao_uti", 0) > 30:
+        if metrics.get("proporcao_casos_uti", 0) > 30:
             recommendations.append(
-                "- A taxa de ocupação de UTI está **elevada**, recomenda-se "
-                "monitoramento da capacidade hospitalar."
+                "- A proporção de casos com internação em UTI está **acima do "
+                "limiar heurístico de 30%**, recomenda-se acompanhar a "
+                "capacidade hospitalar."
             )
         else:
-            recommendations.append("- A taxa de ocupação de UTI está **controlada**.")
+            recommendations.append(
+                "- A proporção de casos com internação em UTI está **abaixo do "
+                "limiar heurístico de 30%**."
+            )
 
         if metrics.get("taxa_vacinacao", 0) < 60:
             recommendations.append(

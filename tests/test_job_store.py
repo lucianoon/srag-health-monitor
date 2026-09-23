@@ -1,11 +1,34 @@
 """Testes dos stores de jobs (src/services/job_store.py)."""
 
 import tempfile
+import threading
 import unittest
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import tests.conftest  # noqa: F401  garante src/ no sys.path
 from services.job_store import InMemoryJobStore, JobStatus, SQLiteJobStore
+
+
+def _drain_queue(db_path: str, start: threading.Barrier | None = None) -> list[str]:
+    """Reserva jobs até a fila esvaziar, como faria um processo worker.
+
+    Cada chamada abre seu próprio ``SQLiteJobStore`` (e, portanto, seu
+    próprio ``Lock``): a única coordenação possível é a do SQLite.
+    """
+    store = SQLiteJobStore(db_path)
+    if start is not None:
+        start.wait()
+    claimed: list[str] = []
+    empty_polls = 0
+    while empty_polls < 3:
+        job = store.claim_next()
+        if job is None:
+            empty_polls += 1
+            continue
+        empty_polls = 0
+        claimed.append(job.job_id)
+    return claimed
 
 
 class TestJobStore(unittest.TestCase):
@@ -79,6 +102,62 @@ class TestJobStore(unittest.TestCase):
             self.assertEqual(claimed.job_id, job.job_id)
             self.assertEqual(claimed.status, JobStatus.RUNNING)
             self.assertIsNone(store.claim_next())
+
+    def test_sqlite_claim_is_exclusive_across_store_instances(self):
+        # Regressão: o claim conferia só o Lock do processo; stores
+        # independentes (workers distintos) podiam reservar o mesmo job.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = str(Path(tmpdir) / "jobs.db")
+            seed = SQLiteJobStore(db_path)
+            job_ids = {seed.create().job_id for _ in range(40)}
+
+            workers = 4
+            start = threading.Barrier(workers)
+            results: list[list[str]] = [[] for _ in range(workers)]
+
+            def run(index: int) -> None:
+                results[index] = _drain_queue(db_path, start)
+
+            threads = [
+                threading.Thread(target=run, args=(index,)) for index in range(workers)
+            ]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=60)
+
+            claimed = [job_id for result in results for job_id in result]
+            counts = seed.status_counts()
+
+        self.assertEqual(len(claimed), len(set(claimed)), "job reservado mais de uma vez")
+        self.assertEqual(set(claimed), job_ids)
+        self.assertEqual(counts[JobStatus.RUNNING], len(job_ids))
+        self.assertEqual(counts[JobStatus.QUEUED], 0)
+
+    def test_sqlite_claim_is_exclusive_across_processes(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = str(Path(tmpdir) / "jobs.db")
+            seed = SQLiteJobStore(db_path)
+            job_ids = {seed.create().job_id for _ in range(30)}
+
+            with ProcessPoolExecutor(max_workers=2) as pool:
+                futures = [pool.submit(_drain_queue, db_path) for _ in range(2)]
+                claimed = [job_id for future in futures for job_id in future.result()]
+
+        self.assertEqual(len(claimed), len(set(claimed)), "job reservado mais de uma vez")
+        self.assertEqual(set(claimed), job_ids)
+
+    def test_sqlite_claim_skips_job_taken_by_another_connection(self):
+        # Outro worker reservou o job entre a criação e o nosso claim: a
+        # linha já não está queued e o claim não pode devolvê-la.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            db_path = Path(tmpdir) / "jobs.db"
+            ours = SQLiteJobStore(db_path)
+            theirs = SQLiteJobStore(db_path)
+            job = ours.create()
+
+            self.assertEqual(theirs.claim_next().job_id, job.job_id)
+            self.assertIsNone(ours.claim_next())
 
     def test_list_recent_filters_by_status(self):
         store = InMemoryJobStore()

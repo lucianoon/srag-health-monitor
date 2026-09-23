@@ -282,11 +282,21 @@ class SQLiteJobStore:
         self._update(job_id, status=JobStatus.FAILED.value, error=error)
 
     def claim_next(self) -> ReportJob | None:
-        """Reserva o próximo job pendente para execução."""
+        """Reserva o próximo job pendente para execução.
+
+        O claim é atômico entre processos, não só entre threads: o ``Lock``
+        protege apenas o processo atual. Por isso a reserva roda numa
+        transação ``BEGIN IMMEDIATE`` (a trava de escrita do SQLite é obtida
+        antes do SELECT, então dois workers não escolhem o mesmo job) e o
+        UPDATE só vale se o job ainda estiver ``queued``: ``rowcount``
+        diferente de 1 significa que o job não foi reservado por esta
+        chamada, e nada é devolvido (o worker tenta de novo no próximo poll).
+        """
         with self._lock, self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
             row = conn.execute(
                 """
-                SELECT * FROM report_jobs
+                SELECT job_id FROM report_jobs
                 WHERE status = ?
                 ORDER BY created_at
                 LIMIT 1
@@ -296,8 +306,7 @@ class SQLiteJobStore:
             if row is None:
                 return None
 
-            updated_at = datetime.now().isoformat()
-            conn.execute(
+            cursor = conn.execute(
                 """
                 UPDATE report_jobs
                 SET status = ?, updated_at = ?
@@ -305,18 +314,20 @@ class SQLiteJobStore:
                 """,
                 (
                     JobStatus.RUNNING.value,
-                    updated_at,
+                    datetime.now().isoformat(),
                     row["job_id"],
                     JobStatus.QUEUED.value,
                 ),
             )
+            if cursor.rowcount != 1:
+                return None
 
             claimed = conn.execute(
                 "SELECT * FROM report_jobs WHERE job_id = ?",
                 (row["job_id"],),
             ).fetchone()
 
-        return self._row_to_job(claimed) if claimed else None
+        return self._row_to_job(claimed)
 
     def list_recent(
         self,

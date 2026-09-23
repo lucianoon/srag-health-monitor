@@ -34,7 +34,9 @@ class ReportWorker:
 
         audit_logger = None
         try:
-            config = AppConfig.from_env(
+            # Payload vem de cliente (API/retry): caminhos presos às bases
+            # do servidor, inclusive para jobs antigos já enfileirados.
+            config = AppConfig.for_client_request(
                 model_name=job.payload.get("model"),
                 output_dir=job.payload.get("output_dir"),
                 db_path=job.payload.get("db_path"),

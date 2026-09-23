@@ -5,20 +5,44 @@ from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
-from config import AppConfig
+from config import AppConfig, UnsafePathError, check_relative_path, ensure_within
 from guardrails.audit_logger import ExecutionTracker, create_audit_logger
 from services.job_store import JobStatus, ReportJob, SQLiteJobStore
 from services.report_service import GenerateReportService
 
 
 class GenerateReportRequest(BaseModel):
-    """Parâmetros aceitos para geração de relatório via API."""
+    """Parâmetros aceitos para geração de relatório via API.
+
+    Caminhos nunca são interpretados como caminhos do servidor: são sempre
+    relativos a diretórios base configurados no servidor, e qualquer
+    tentativa de sair deles (absoluto, ``..``, symlink) é rejeitada.
+    """
 
     model: str | None = Field(default=None)
-    output_dir: str | None = Field(default=None)
-    db_path: str | None = Field(default=None)
+    output_dir: str | None = Field(
+        default=None,
+        description=(
+            "Subdiretório, relativo ao diretório de relatórios do servidor "
+            "(SRAG_OUTPUT_DIR), onde o relatório será gravado."
+        ),
+    )
+    db_path: str | None = Field(
+        default=None,
+        description=(
+            "Arquivo SQLite relativo ao diretório de dados do servidor "
+            "(SRAG_DATA_DIR)."
+        ),
+    )
+
+    @field_validator("output_dir", "db_path")
+    @classmethod
+    def _reject_unsafe_paths(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return check_relative_path(value)
 
 
 class GenerateReportResponse(BaseModel):
@@ -113,12 +137,23 @@ def ready() -> ReadinessResponse:
     )
 
 
+def _client_config(request: GenerateReportRequest) -> AppConfig:
+    """Resolve os parâmetros do cliente contra os diretórios base do servidor."""
+    try:
+        return AppConfig.for_client_request(
+            model_name=request.model,
+            output_dir=request.output_dir,
+            db_path=request.db_path,
+        )
+    except UnsafePathError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Caminho não permitido: {exc}",
+        ) from exc
+
+
 def _build_config(request: GenerateReportRequest) -> AppConfig:
-    config = AppConfig.from_env(
-        model_name=request.model,
-        output_dir=request.output_dir,
-        db_path=request.db_path,
-    )
+    config = _client_config(request)
     config.ensure_runtime_dirs()
     return config
 
@@ -175,7 +210,15 @@ def _resolve_report_artifact(job: ReportJob) -> Path:
             detail="Artefato do relatório não registrado",
         )
 
-    report_path = Path(job.report_path).resolve()
+    # O report_path vem do store (inclusive de jobs antigos, gravados antes
+    # da validação de output_dir): só é servido se estiver sob SRAG_OUTPUT_DIR.
+    try:
+        report_path = ensure_within(AppConfig.from_env().reports_dir, job.report_path)
+    except UnsafePathError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail="Artefato fora do diretório de relatórios",
+        ) from exc
     if report_path.suffix.lower() != ".md":
         raise HTTPException(
             status_code=403,
@@ -199,6 +242,8 @@ def create_report_job(
     _auth: None = Depends(require_api_key),
 ) -> CreateReportJobResponse:
     """Cria um job para geração assíncrona por worker."""
+    # Rejeita já na criação; o worker valida de novo ao executar.
+    _client_config(request)
     job = job_store.create(payload=request.model_dump(exclude_none=True))
 
     return CreateReportJobResponse(

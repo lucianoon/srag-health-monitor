@@ -30,7 +30,7 @@ class EpidemiologyAnalysisAgent:
         findings = [
             self._growth_finding(metrics.get("taxa_aumento_casos", 0.0)),
             self._mortality_finding(metrics.get("taxa_mortalidade", 0.0)),
-            self._uti_finding(metrics.get("taxa_ocupacao_uti", 0.0)),
+            self.uti_finding(metrics.get("proporcao_casos_uti", 0.0)),
             self._vaccination_finding(metrics.get("taxa_vacinacao", 0.0)),
         ]
 
@@ -74,12 +74,12 @@ class EpidemiologyAnalysisAgent:
         }
 
     @staticmethod
-    def _uti_finding(value: float) -> dict:
+    def uti_finding(value: float) -> dict:
         severity = "high" if value > 30 else "moderate" if value >= 20 else "low"
         return {
             "kind": "uti",
             "severity": severity,
-            "message": f"Taxa de internação em UTI observada: {value:.2f}%.",
+            "message": f"Proporção de casos com internação em UTI: {value:.2f}%.",
         }
 
     @staticmethod
@@ -98,7 +98,7 @@ class EpidemiologyAnalysisAgent:
             score += 2
         if metrics.get("taxa_mortalidade", 0.0) > 10:
             score += 2
-        if metrics.get("taxa_ocupacao_uti", 0.0) > 30:
+        if metrics.get("proporcao_casos_uti", 0.0) > 30:
             score += 1
         if metrics.get("taxa_vacinacao", 0.0) < 50:
             score += 1

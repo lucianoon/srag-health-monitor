@@ -8,6 +8,7 @@ from unittest import mock
 
 from services.job_store import InMemoryJobStore, JobStatus
 from tests.conftest import offline_news_guard  # também garante src/ no sys.path
+from tests.test_config import UNSAFE_PATHS
 
 # Mantém o módulo offline: POST /reports/sync executa o pipeline completo,
 # incluindo a coleta de notícias.
@@ -25,6 +26,18 @@ class TestApi(unittest.TestCase):
         self.store = InMemoryJobStore()
         api_app.job_store = self.store
         self.client = TestClient(api_app.app)
+
+        # Artefatos só são servidos de dentro de SRAG_OUTPUT_DIR.
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.tmp_root = Path(tmp.name)
+        self.reports_dir = self.tmp_root / "reports"
+        self.reports_dir.mkdir()
+        env = mock.patch.dict(
+            os.environ, {"SRAG_OUTPUT_DIR": str(self.reports_dir)}, clear=False
+        )
+        env.start()
+        self.addCleanup(env.stop)
 
     def tearDown(self):
         self.api_app.job_store = self.original_job_store
@@ -46,14 +59,10 @@ class TestApi(unittest.TestCase):
         self.assertIn("srag_db_exists", body)
 
     def test_create_report_job_returns_status_url(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            response = self.client.post(
-                "/reports",
-                json={
-                    "db_path": str(Path(tmpdir) / "missing.db"),
-                    "output_dir": str(Path(tmpdir) / "reports"),
-                },
-            )
+        response = self.client.post(
+            "/reports",
+            json={"db_path": "missing.db", "output_dir": "equipe-a"},
+        )
 
         self.assertEqual(response.status_code, 202)
         body = response.json()
@@ -63,6 +72,49 @@ class TestApi(unittest.TestCase):
         status_response = self.client.get(body["status_url"])
         self.assertEqual(status_response.status_code, 200)
         self.assertEqual(status_response.json()["status"], "queued")
+
+    def test_create_report_job_rejects_path_traversal(self):
+        for field in ("db_path", "output_dir"):
+            for value in UNSAFE_PATHS:
+                with self.subTest(field=field, value=value):
+                    response = self.client.post("/reports", json={field: value})
+                    self.assertEqual(response.status_code, 422)
+
+        self.assertEqual(self.store.list_recent(), [])
+
+    def test_create_report_job_rejects_symlink_escaping_data_dir(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data_dir = Path(tmpdir) / "data"
+            data_dir.mkdir()
+            outside = Path(tmpdir) / "fora"
+            outside.mkdir()
+            try:
+                (data_dir / "atalho").symlink_to(outside, target_is_directory=True)
+            except (OSError, NotImplementedError) as exc:
+                self.skipTest(f"symlink indisponível neste ambiente: {exc}")
+
+            with mock.patch.dict(os.environ, {"SRAG_DATA_DIR": str(data_dir)}, clear=False):
+                response = self.client.post("/reports", json={"db_path": "atalho/srag.db"})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(self.store.list_recent(), [])
+
+    def test_sync_report_rejects_path_traversal_without_touching_disk(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            reports_dir = Path(tmpdir) / "base" / "reports"
+            env = {
+                "SRAG_DATA_DIR": str(Path(tmpdir) / "base" / "data"),
+                "SRAG_OUTPUT_DIR": str(reports_dir),
+            }
+            with mock.patch.dict(os.environ, env, clear=False):
+                response = self.client.post(
+                    "/reports/sync",
+                    json={"output_dir": "../../escapou"},
+                )
+
+            self.assertFalse((Path(tmpdir) / "escapou").exists())
+
+        self.assertEqual(response.status_code, 422)
 
     def test_list_report_jobs_endpoint(self):
         self.store.create()
@@ -106,24 +158,47 @@ class TestApi(unittest.TestCase):
         self.assertEqual(body["recent_failures"][0]["job_id"], failed.job_id)
 
     def test_download_report_artifact(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            report_path = Path(tmpdir) / "report.md"
-            report_path.write_text("# Relatório\n", encoding="utf-8")
-            job = self.store.create()
-            self.store.mark_succeeded(
-                job.job_id,
-                execution_id="exec-1",
-                report_path=str(report_path),
-                duration_ms=10.0,
-                pii_detected=False,
-                pii_types=[],
-                summary={"success": True},
-            )
+        report_path = self.reports_dir / "equipe-a" / "report.md"
+        report_path.parent.mkdir()
+        report_path.write_text("# Relatório\n", encoding="utf-8")
+        job_id = self._mark_succeeded_with_artifact(report_path)
 
-            response = self.client.get(f"/reports/{job.job_id}/artifact")
+        response = self.client.get(f"/reports/{job_id}/artifact")
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("# Relatório", response.text)
+
+    def test_download_report_artifact_rejects_paths_outside_reports_dir(self):
+        # Jobs antigos no store podem ter report_path em qualquer lugar.
+        outside = self.tmp_root / "fora.md"
+        outside.write_text("# Segredo\n", encoding="utf-8")
+        for stored in (
+            outside,                                    # absoluto fora da base
+            self.reports_dir / ".." / "fora.md",        # ".." a partir da base
+            "../fora.md",                               # relativo com ".."
+        ):
+            with self.subTest(stored=str(stored)):
+                job_id = self._mark_succeeded_with_artifact(stored)
+
+                response = self.client.get(f"/reports/{job_id}/artifact")
+
+                self.assertEqual(response.status_code, 403)
+                self.assertNotIn("Segredo", response.text)
+
+    def test_download_report_artifact_rejects_symlink_escaping_reports_dir(self):
+        outside = self.tmp_root / "fora.md"
+        outside.write_text("# Segredo\n", encoding="utf-8")
+        link = self.reports_dir / "atalho.md"
+        try:
+            link.symlink_to(outside)
+        except (OSError, NotImplementedError) as exc:
+            self.skipTest(f"symlink indisponível neste ambiente: {exc}")
+        job_id = self._mark_succeeded_with_artifact(link)
+
+        response = self.client.get(f"/reports/{job_id}/artifact")
+
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn("Segredo", response.text)
 
     def test_download_report_artifact_rejects_unfinished_job(self):
         job = self.store.create()
@@ -132,7 +207,7 @@ class TestApi(unittest.TestCase):
 
         self.assertEqual(response.status_code, 409)
 
-    def _mark_succeeded_with_artifact(self, report_path: Path) -> str:
+    def _mark_succeeded_with_artifact(self, report_path: Path | str) -> str:
         job = self.store.create()
         self.store.mark_succeeded(
             job.job_id,
@@ -146,36 +221,36 @@ class TestApi(unittest.TestCase):
         return job.job_id
 
     def test_download_report_artifact_rejects_non_markdown(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            artifact = Path(tmpdir) / "report.txt"
-            artifact.write_text("conteudo", encoding="utf-8")
-            job_id = self._mark_succeeded_with_artifact(artifact)
+        artifact = self.reports_dir / "report.txt"
+        artifact.write_text("conteudo", encoding="utf-8")
+        job_id = self._mark_succeeded_with_artifact(artifact)
 
-            response = self.client.get(f"/reports/{job_id}/artifact")
+        response = self.client.get(f"/reports/{job_id}/artifact")
 
         self.assertEqual(response.status_code, 403)
 
     def test_download_report_artifact_missing_file_returns_404(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            job_id = self._mark_succeeded_with_artifact(
-                Path(tmpdir) / "inexistente.md"
-            )
+        job_id = self._mark_succeeded_with_artifact(self.reports_dir / "inexistente.md")
 
-            response = self.client.get(f"/reports/{job_id}/artifact")
+        response = self.client.get(f"/reports/{job_id}/artifact")
 
         self.assertEqual(response.status_code, 404)
 
     def test_sync_report_returns_500_when_database_is_missing(self):
         with (
             tempfile.TemporaryDirectory() as tmpdir,
-            mock.patch.dict(os.environ, {"SRAG_DATA_DIR": tmpdir}, clear=False),
+            mock.patch.dict(
+                os.environ,
+                {
+                    "SRAG_DATA_DIR": tmpdir,
+                    "SRAG_OUTPUT_DIR": str(Path(tmpdir) / "reports"),
+                },
+                clear=False,
+            ),
         ):
             response = self.client.post(
                 "/reports/sync",
-                json={
-                    "db_path": str(Path(tmpdir) / "missing.db"),
-                    "output_dir": str(Path(tmpdir) / "reports"),
-                },
+                json={"db_path": "missing.db"},
             )
 
         self.assertEqual(response.status_code, 500)

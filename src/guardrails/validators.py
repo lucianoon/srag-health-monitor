@@ -114,7 +114,7 @@ class OutputValidator:
             Tupla (válido, mensagem)
         """
         required_keys = ['taxa_aumento_casos', 'taxa_mortalidade',
-                         'taxa_ocupacao_uti', 'taxa_vacinacao']
+                         'proporcao_casos_uti', 'taxa_vacinacao']
 
         # Verificar chaves obrigatórias
         for key in required_keys:
@@ -128,8 +128,10 @@ class OutputValidator:
         if not (0 <= metrics['taxa_mortalidade'] <= 100):
             return False, "Taxa de mortalidade fora do range esperado (0-100%)"
 
-        if not (0 <= metrics['taxa_ocupacao_uti'] <= 100):
-            return False, "Taxa de ocupação de UTI fora do range esperado (0-100%)"
+        if not (0 <= metrics['proporcao_casos_uti'] <= 100):
+            return False, (
+                "Proporção de casos com internação em UTI fora do range esperado (0-100%)"
+            )
 
         if not (0 <= metrics['taxa_vacinacao'] <= 100):
             return False, "Taxa de vacinação fora do range esperado (0-100%)"
@@ -152,7 +154,8 @@ class OutputValidator:
 
         # Verificar seções obrigatórias
         required_sections = ['Métricas Principais', 'Taxa de Mortalidade',
-                             'Taxa de Ocupação de UTI', 'Taxa de Vacinação']
+                             'Proporção de Casos com Internação em UTI',
+                             'Taxa de Vacinação']
 
         for section in required_sections:
             if section not in report:
@@ -282,7 +285,7 @@ if __name__ == "__main__":
     metrics = {
         'taxa_aumento_casos': -3.67,
         'taxa_mortalidade': 7.67,
-        'taxa_ocupacao_uti': 27.89,
+        'proporcao_casos_uti': 27.89,
         'taxa_vacinacao': 52.90
     }
     valid, msg = OutputValidator.validate_metrics(metrics)

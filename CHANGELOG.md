@@ -9,6 +9,8 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 ### Adicionado
 - `CONTRIBUTING.md` e Dependabot para `uv` e GitHub Actions (mensal, minor/patch agrupados).
 - `HEALTHCHECK` na imagem Docker, para `docker run` avulso; o compose já tinha o probe.
+- README: seção de limitações epidemiológicas (sem nowcasting, denominadores,
+  limiares heurísticos).
 
 ### Alterado
 - Builds reproduzíveis: `pyproject.toml` + `uv.lock` substituem `requirements.txt`,
@@ -21,7 +23,29 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 - README em português volta a ser o principal; a versão em inglês fica em `README.en.md`.
 - Documentação expõe evidências operacionais e um relatório de exemplo em `docs/exemplo/`.
 
+### Corrigido
+- O indicador "taxa de ocupação de UTI" media, na verdade, a proporção de casos
+  notificados com internação em UTI. Renomeado para `proporcao_casos_uti`
+  ("Proporção de Casos com Internação em UTI") em métricas, relatório, validadores
+  e documentação; as recomendações passam a citar o limiar heurístico de 30%.
+  Estado de pipeline salvo antes do rename (retry de job antigo) é migrado na
+  retomada, para o indicador não aparecer como 0,00%.
+- `claim_next` do store SQLite passa a ser atômico entre processos
+  (`BEGIN IMMEDIATE` + checagem de `rowcount`); antes, dois workers podiam
+  executar o mesmo job.
+
+### Removido
+- `src/agents/orchestrator.py`: orquestrador legado (LangGraph) sem nenhum import,
+  com ano 2024 fixo e manipulação de `sys.path`. O pipeline em uso é `agents/report_pipeline.py`.
+- Dependência direta `langgraph`, sem uso no código (segue no lockfile apenas como
+  dependência transitiva de `langchain`).
+
 ### Segurança
+- API: `db_path` e `output_dir` deixam de aceitar caminhos arbitrários do cliente.
+  Passam a ser relativos a `SRAG_DATA_DIR` / `SRAG_OUTPUT_DIR`; absolutos, `..` e
+  symlinks para fora da base são rejeitados na API e de novo no worker.
+- `GET /reports/{id}/artifact` só serve arquivos sob `SRAG_OUTPUT_DIR`, inclusive
+  para `report_path` de jobs antigos já gravados no store (403 caso contrário).
 - Política de reporte de vulnerabilidades em `SECURITY.md`.
 - Atualização de dependências mantida dentro dos runtimes suportados.
 - Atualização automática de versões pelo Dependabot desativada; bumps passam por revisão manual.
