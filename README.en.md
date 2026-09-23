@@ -309,6 +309,8 @@ Common responses:
 - `200`: report available
 - `409`: job not finished yet
 - `404`: job or artifact not found
+- `403`: artifact outside `SRAG_OUTPUT_DIR` (including via `..` or a symlink)
+  or not a `.md` file
 
 ### `GET /metrics`
 

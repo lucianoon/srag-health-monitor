@@ -12,6 +12,7 @@ from config import (
     AppConfig,
     UnsafePathError,
     _parse_news_feeds,
+    ensure_within,
     resolve_within,
 )
 
@@ -90,6 +91,21 @@ class TestClientPaths(unittest.TestCase):
 
         with self.assertRaises(UnsafePathError):
             resolve_within(self.base, "atalho/srag.db")
+
+    def test_ensure_within_accepts_stored_absolute_path_inside_base(self):
+        stored = self.base / "sub" / "relatorio.md"
+        self.assertEqual(ensure_within(self.base, stored), stored.resolve())
+        self.assertEqual(ensure_within(self.base, "sub/relatorio.md"), stored.resolve())
+
+    def test_ensure_within_rejects_stored_paths_outside_base(self):
+        for stored in (
+            Path(self.tmpdir.name) / "fora.md",
+            self.base / ".." / "fora.md",
+            "../fora.md",
+            "",
+        ):
+            with self.subTest(stored=str(stored)), self.assertRaises(UnsafePathError):
+                ensure_within(self.base, stored)
 
     def test_for_client_request_confines_paths_to_server_dirs(self):
         data_dir = Path(self.tmpdir.name) / "data"

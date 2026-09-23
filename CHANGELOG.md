@@ -40,6 +40,8 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 - API: `db_path` e `output_dir` deixam de aceitar caminhos arbitrários do cliente.
   Passam a ser relativos a `SRAG_DATA_DIR` / `SRAG_OUTPUT_DIR`; absolutos, `..` e
   symlinks para fora da base são rejeitados na API e de novo no worker.
+- `GET /reports/{id}/artifact` só serve arquivos sob `SRAG_OUTPUT_DIR`, inclusive
+  para `report_path` de jobs antigos já gravados no store (403 caso contrário).
 - Política de reporte de vulnerabilidades em `SECURITY.md`.
 - Atualização de dependências mantida dentro dos runtimes suportados.
 - Atualização automática de versões pelo Dependabot desativada; bumps passam por revisão manual.

@@ -7,7 +7,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, field_validator
 
-from config import AppConfig, UnsafePathError, check_relative_path
+from config import AppConfig, UnsafePathError, check_relative_path, ensure_within
 from guardrails.audit_logger import ExecutionTracker, create_audit_logger
 from services.job_store import JobStatus, ReportJob, SQLiteJobStore
 from services.report_service import GenerateReportService
@@ -210,7 +210,15 @@ def _resolve_report_artifact(job: ReportJob) -> Path:
             detail="Artefato do relatório não registrado",
         )
 
-    report_path = Path(job.report_path).resolve()
+    # O report_path vem do store (inclusive de jobs antigos, gravados antes
+    # da validação de output_dir): só é servido se estiver sob SRAG_OUTPUT_DIR.
+    try:
+        report_path = ensure_within(AppConfig.from_env().reports_dir, job.report_path)
+    except UnsafePathError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail="Artefato fora do diretório de relatórios",
+        ) from exc
     if report_path.suffix.lower() != ".md":
         raise HTTPException(
             status_code=403,

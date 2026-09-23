@@ -303,6 +303,8 @@ Retornos comuns:
 - `200`: relatório disponível
 - `409`: job ainda não concluído
 - `404`: job ou artefato não encontrado
+- `403`: artefato fora de `SRAG_OUTPUT_DIR` (inclusive via `..` ou symlink) ou
+  que não seja `.md`
 
 ### `GET /metrics`
 

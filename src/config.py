@@ -100,6 +100,29 @@ def resolve_within(base: str | Path, value: str) -> Path:
     return candidate
 
 
+def ensure_within(base: str | Path, path: str | Path) -> Path:
+    """Garante que um caminho gravado pelo servidor esteja dentro de ``base``.
+
+    Para caminhos persistidos (ex.: ``report_path`` de jobs, inclusive
+    antigos): absolutos são aceitos desde que, resolvidos (seguindo
+    symlinks), fiquem dentro da base; relativos passam por
+    ``resolve_within``. Segmentos ``..`` são rejeitados em qualquer caso.
+    """
+    raw = str(path)
+    if not raw.strip() or "\x00" in raw:
+        raise UnsafePathError("caminho vazio ou inválido")
+    candidate = Path(raw)
+    if not candidate.is_absolute():
+        return resolve_within(base, raw)
+    if ".." in PurePosixPath(raw.replace("\\", "/")).parts:
+        raise UnsafePathError("segmentos '..' não são aceitos")
+    base_resolved = Path(base).resolve()
+    resolved = candidate.resolve()
+    if not resolved.is_relative_to(base_resolved):
+        raise UnsafePathError("caminho fora do diretório base permitido")
+    return resolved
+
+
 @dataclass(frozen=True)
 class AppConfig:
     """Configuração de execução do SRAG Health Monitor."""
