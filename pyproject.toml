@@ -9,7 +9,6 @@ dependencies = [
     # AI/ML
     "langchain>=0.1.0",
     "langchain-openai>=0.0.5",
-    "langgraph>=0.0.20",
     "openai>=1.0.0",
     # Dados
     "pandas>=2.0.0",
