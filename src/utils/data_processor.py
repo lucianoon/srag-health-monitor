@@ -180,7 +180,7 @@ class SRAGDataProcessor:
             'total_uti': df['INTERNOU_UTI'].sum(),
             'total_vacinados': df['VACINADO'].sum(),
             'taxa_mortalidade': (df['OBITO'].sum() / len(df)) * 100 if len(df) > 0 else 0,
-            'taxa_uti': (df['INTERNOU_UTI'].sum() / len(df)) * 100 if len(df) > 0 else 0,
+            'proporcao_casos_uti': (df['INTERNOU_UTI'].sum() / len(df)) * 100 if len(df) > 0 else 0,
             'taxa_vacinacao': (df['VACINADO'].sum() / len(df)) * 100 if len(df) > 0 else 0,
             'idade_media': df['IDADE_ANOS'].mean(),
             'idade_mediana': df['IDADE_ANOS'].median(),

@@ -9,6 +9,8 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 ### Adicionado
 - `CONTRIBUTING.md` e Dependabot para `uv` e GitHub Actions (mensal, minor/patch agrupados).
 - `HEALTHCHECK` na imagem Docker, para `docker run` avulso; o compose já tinha o probe.
+- README: seção de limitações epidemiológicas (sem nowcasting, denominadores,
+  limiares heurísticos).
 
 ### Alterado
 - Builds reproduzíveis: `pyproject.toml` + `uv.lock` substituem `requirements.txt`,
@@ -20,6 +22,15 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 - README: seções de execução agrupadas e tabela de evidências levada para o inglês.
 - README em português volta a ser o principal; a versão em inglês fica em `README.en.md`.
 - Documentação expõe evidências operacionais e um relatório de exemplo em `docs/exemplo/`.
+
+### Corrigido
+- O indicador "taxa de ocupação de UTI" media, na verdade, a proporção de casos
+  notificados com internação em UTI. Renomeado para `proporcao_casos_uti`
+  ("Proporção de Casos com Internação em UTI") em métricas, relatório, validadores
+  e documentação; as recomendações passam a citar o limiar heurístico de 30%.
+- `claim_next` do store SQLite passa a ser atômico entre processos
+  (`BEGIN IMMEDIATE` + checagem de `rowcount`); antes, dois workers podiam
+  executar o mesmo job.
 
 ### Removido
 - `src/agents/orchestrator.py`: orquestrador legado (LangGraph) sem nenhum import,

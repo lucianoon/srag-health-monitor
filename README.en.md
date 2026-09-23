@@ -424,6 +424,27 @@ Reference sources:
 - OpenDATASUS/SIVEP-Gripe: https://opendatasus.saude.gov.br/dataset/srag-2021-a-2024
 - Current SUS open data portal: https://dadosabertos.saude.gov.br
 
+## Epidemiological limitations
+
+The indicators are descriptive and meant for operational monitoring; they do not
+replace official bulletins (InfoGripe/Fiocruz, Brazilian Ministry of Health).
+
+- **No nowcasting.** Reporting delay is not corrected: the most recent weeks are
+  usually incomplete in SIVEP-Gripe, so the case growth rate (last 30 days vs.
+  the previous 30, by notification date) tends to underestimate recent growth.
+- **Denominator is the notified case, over the whole database.** Mortality
+  rate, proportion of cases admitted to the ICU and vaccination rate are computed
+  over every case loaded in the database, with no time window. Cases whose
+  outcome is still open count as non-deaths, and vaccination is the share of
+  cases with a vaccine record, not population vaccine coverage.
+- **Proportion of cases admitted to the ICU is not bed occupancy.** The data
+  has no available beds or installed capacity; the indicator only measures the
+  share of notified cases that were admitted to an ICU.
+- **Heuristic thresholds.** The cut-offs used in findings, risk level and
+  recommendations (e.g. growth above 10%, mortality above 10%, ICU case
+  proportion above 30%, vaccination below 50%) are project heuristics, not taken
+  from an official protocol nor validated against historical series.
+
 ## News
 
 Report news items are fetched at runtime from the RSS feeds of organizations

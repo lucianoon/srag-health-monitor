@@ -417,6 +417,29 @@ Fonte de referência:
 - OpenDATASUS/SIVEP-Gripe: https://opendatasus.saude.gov.br/dataset/srag-2021-a-2024
 - Portal atual de dados abertos do SUS: https://dadosabertos.saude.gov.br
 
+## Limitações Epidemiológicas
+
+Os indicadores são descritivos e servem para monitoramento operacional; não
+substituem os boletins oficiais (InfoGripe/Fiocruz, Ministério da Saúde).
+
+- **Sem nowcasting.** Não há correção do atraso de notificação: as semanas mais
+  recentes costumam estar incompletas no SIVEP-Gripe, então a taxa de aumento de
+  casos (últimos 30 dias contra os 30 anteriores, por data de notificação) tende
+  a subestimar o crescimento recente.
+- **Denominador é o caso notificado, sobre toda a base.** Taxa de mortalidade,
+  proporção de casos com internação em UTI e taxa de vacinação são calculadas
+  sobre todos os casos carregados no banco, sem janela temporal. Casos com
+  evolução ainda em aberto contam como não-óbito, e a vacinação é a fração de
+  casos com registro de vacina, não cobertura vacinal da população.
+- **Proporção de casos com internação em UTI não é ocupação de leitos.** A base
+  não traz leitos disponíveis nem capacidade instalada; o indicador mede apenas a
+  fração dos casos notificados que tiveram internação em UTI.
+- **Limiares heurísticos.** Os cortes usados nos achados, no nível de risco e
+  nas recomendações (por exemplo, crescimento acima de 10%, mortalidade acima de
+  10%, proporção de casos em UTI acima de 30%, vacinação abaixo de 50%) são
+  heurísticos do projeto, não derivados de protocolo oficial nem validados
+  contra séries históricas.
+
 ## Notícias
 
 As notícias dos relatórios são obtidas em tempo de execução de feeds RSS de

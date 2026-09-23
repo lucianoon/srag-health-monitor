@@ -193,7 +193,7 @@ class TestMultiAgentPipeline(TempSRAGDatabaseMixin, unittest.TestCase):
             metrics={
                 "taxa_aumento_casos": 20.0,
                 "taxa_mortalidade": 12.0,
-                "taxa_ocupacao_uti": 35.0,
+                "proporcao_casos_uti": 35.0,
                 "taxa_vacinacao": 40.0,
                 "total_casos": 100,
             },
@@ -213,7 +213,7 @@ class TestMultiAgentPipeline(TempSRAGDatabaseMixin, unittest.TestCase):
             metrics={
                 "taxa_aumento_casos": 0.0,
                 "taxa_mortalidade": 7.0,
-                "taxa_ocupacao_uti": 25.0,
+                "proporcao_casos_uti": 25.0,
                 "taxa_vacinacao": 65.0,
                 "total_casos": 12,
             },
@@ -235,6 +235,8 @@ class TestMultiAgentPipeline(TempSRAGDatabaseMixin, unittest.TestCase):
         )
 
         self.assertIn("Fonte e Rastreabilidade", report)
+        self.assertIn("Proporção de Casos com Internação em UTI", report)
+        self.assertNotIn("Ocupação de UTI", report)
         self.assertIn("sqlite_cache", report)
         self.assertIn("Narrativa: deterministica", report)
 
@@ -243,7 +245,7 @@ class TestMultiAgentPipeline(TempSRAGDatabaseMixin, unittest.TestCase):
             metrics={
                 "taxa_aumento_casos": 0.0,
                 "taxa_mortalidade": 7.0,
-                "taxa_ocupacao_uti": 25.0,
+                "proporcao_casos_uti": 25.0,
                 "taxa_vacinacao": 65.0,
                 "total_casos": 12,
             },

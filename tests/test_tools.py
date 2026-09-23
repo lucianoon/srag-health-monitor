@@ -28,7 +28,7 @@ class TestDatabaseTool(TempSRAGDatabaseMixin, unittest.TestCase):
         result = self.tool._run(query_type="metrics")
         self.assertIn("taxa_aumento_casos", result)
         self.assertIn("taxa_mortalidade", result)
-        self.assertIn("taxa_ocupacao_uti", result)
+        self.assertIn("proporcao_casos_uti", result)
         self.assertIn("taxa_vacinacao", result)
 
     def test_query_daily_cases(self):

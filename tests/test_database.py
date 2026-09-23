@@ -17,10 +17,15 @@ class TestDatabaseManager(TempSRAGDatabaseMixin, unittest.TestCase):
         self.assertGreaterEqual(rate, 0)
         self.assertLessEqual(rate, 100)
 
-    def test_get_uti_occupation_rate(self):
-        rate = self.db.get_uti_occupation_rate()
-        self.assertGreaterEqual(rate, 0)
-        self.assertLessEqual(rate, 100)
+    def test_get_icu_admission_proportion(self):
+        # Amostra: 12 casos, internou_uti=1 quando i % 3 == 0 (4 casos).
+        proportion = self.db.get_icu_admission_proportion()
+        self.assertAlmostEqual(proportion, 4 / 12 * 100)
+
+    def test_all_metrics_label_icu_indicator_as_case_proportion(self):
+        metrics = self.db.get_all_metrics()
+        self.assertIn("proporcao_casos_uti", metrics)
+        self.assertNotIn("taxa_ocupacao_uti", metrics)
 
     def test_get_vaccination_rate(self):
         rate = self.db.get_vaccination_rate()

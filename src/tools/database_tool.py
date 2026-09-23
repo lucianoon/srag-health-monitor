@@ -42,7 +42,8 @@ class DatabaseQueryTool(BaseTool):
     description: str = (
         "Consulta o banco de dados de SRAG para obter métricas e dados. "
         "Use 'metrics' para obter todas as métricas principais (taxa de aumento de casos, "
-        "taxa de mortalidade, taxa de ocupação de UTI, taxa de vacinação). "
+        "taxa de mortalidade, proporção de casos com internação em UTI, "
+        "taxa de vacinação). "
         "Use 'daily_cases' para obter casos diários dos últimos N dias. "
         "Use 'monthly_cases' para obter casos mensais dos últimos N meses."
     )

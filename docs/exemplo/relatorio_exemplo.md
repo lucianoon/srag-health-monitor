@@ -17,8 +17,8 @@
 ### 1.2 Taxa de Mortalidade
 **7.61%** dos casos registrados resultaram em óbito.
 
-### 1.3 Taxa de Ocupação de UTI
-**15.67%** dos casos necessitaram de internação em UTI.
+### 1.3 Proporção de Casos com Internação em UTI
+**15.67%** dos casos registrados tiveram internação em UTI (proporção entre casos notificados; não é taxa de ocupação de leitos).
 
 ### 1.4 Taxa de Vacinação
 **62.15%** dos pacientes registrados possuíam vacinação prévia.
@@ -37,7 +37,7 @@ Observa-se uma **tendência de crescimento** de 8.05% nos casos, indicando neces
 
 - **Moderate**: Casos relativamente estáveis no período recente.
 - **Moderate**: Taxa de mortalidade observada: 7.61%.
-- **Low**: Taxa de internação em UTI observada: 15.67%.
+- **Low**: Proporção de casos com internação em UTI: 15.67%.
 - **Moderate**: Taxa de vacinação observada: 62.15%.
 
 ### 2.3 Notícias Recentes
@@ -79,7 +79,7 @@ O estado de São Paulo registrou 13 casos de sarampo em 2026, de acordo com a Se
 ## 4. Conclusões e Recomendações
 
 - A taxa de mortalidade está **dentro da faixa esperada** para SRAG.
-- A taxa de ocupação de UTI está **controlada**.
+- A proporção de casos com internação em UTI está **abaixo do limiar heurístico de 30%**.
 - A taxa de vacinação está **satisfatória**, contribuindo para o controle de casos graves.
 
 ---

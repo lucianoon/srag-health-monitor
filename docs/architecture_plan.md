@@ -19,7 +19,7 @@ Sistema de monitoramento inteligente de surtos de SRAG (Síndrome Respiratória 
 
 #### 2.1 Database Query Tool
 - Consultar métricas no banco de dados SQLite
-- Calcular: taxa de aumento de casos, taxa de mortalidade, taxa de ocupação UTI, taxa de vacinação
+- Calcular: taxa de aumento de casos, taxa de mortalidade, proporção de casos com internação em UTI, taxa de vacinação
 - Retornar dados para gráficos (30 dias e 12 meses)
 
 #### 2.2 News Search Tool
