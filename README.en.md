@@ -24,7 +24,7 @@ guardrails and chart generation.
 
 | Evidence | What it demonstrates |
 |---|---|
-| 89 offline tests | Pipeline, API, worker, retry, guardrails and ingestion |
+| Offline test suite in CI | Pipeline, API, worker, lease/recovery, retry, guardrails and ingestion |
 | DATASUS/SIVEP-Gripe data | Applied to a real Brazilian public-health domain |
 | Per-stage resumable jobs | Resilience without redoing completed work |
 | Versioned report and chart | Output you can verify before installing anything |
@@ -36,7 +36,8 @@ guardrails and chart generation.
 The project grew from a PoC into an operable product base:
 
 - FastAPI service to create and query report jobs.
-- Separate worker to execute pending jobs.
+- Separate worker to execute pending jobs, with a lease + heartbeat that
+  recovers orphaned jobs when a worker dies.
 - Multi-agent pipeline: SUS ingestion, epidemiological analysis and report writing.
 - Job persistence in SQLite.
 - SRAG database in SQLite.
@@ -210,6 +211,19 @@ Stop:
 make docker-down
 ```
 
+The image runs as an unprivileged user (`app`, uid/gid `10001`). On Linux,
+the host directories mounted into the containers (`./data` and `./outputs`)
+must be writable by that uid:
+
+```bash
+mkdir -p data outputs/reports outputs/logs
+sudo chown -R 10001:10001 data outputs
+```
+
+For a different uid, rebuild with `docker compose build --build-arg
+APP_UID=$(id -u) --build-arg APP_GID=$(id -g)`. On Docker Desktop
+(macOS/Windows) this is usually unnecessary.
+
 ### Validation
 
 ```bash
@@ -286,6 +300,24 @@ Possible states:
 - `running`
 - `succeeded`
 - `failed`
+
+#### Lease and recovery of orphaned jobs
+
+When a worker claims a job it gets a *lease* (`lease_owner` +
+`lease_expires_at`, 60 s by default), and a heartbeat thread renews it every
+third of the lease while the job runs. If the worker dies, the heartbeat stops
+and the lease expires; the next `claim_next` (from any worker) claims the job
+again, in the same `BEGIN IMMEDIATE` transaction that reserves `queued` jobs.
+The new attempt reuses the `execution_id` stored on the job and resumes from
+the blackboard, without redoing completed steps. A valid lease is never taken
+from another worker, and a worker that lost its lease can no longer renew it.
+
+Every claim counts as an attempt (`attempts`). A job whose lease expires after
+`SRAG_JOB_MAX_ATTEMPTS` attempts (3 by default) becomes `failed` with an
+explicit error ("Lease expirado sem heartbeat...") and can be resubmitted
+through `POST /reports/{job_id}/retry`. Older jobs databases get the new
+columns automatically (`ALTER TABLE ... ADD COLUMN`), and jobs left in
+`running` by previous versions are treated as orphans.
 
 ### `POST /reports/{job_id}/retry`
 
@@ -367,11 +399,13 @@ make worker-once
 | `SRAG_MODEL` | `gpt-4.1-mini` | configured model |
 | `SRAG_SUS_DATA_URL` | empty | URL of the SRAG CSV resource on the official portal |
 | `SRAG_SUS_INGEST_NROWS` | empty | optional row limit for smoke tests |
+| `SRAG_JOB_LEASE_SECONDS` | `60` | lease duration of a running job (heartbeat every 1/3) |
+| `SRAG_JOB_MAX_ATTEMPTS` | `3` | attempts before an orphaned job becomes `failed` |
 | `SRAG_NEWS_FEEDS` | empty | optional JSON overriding the RSS news feeds |
 
 ## Tests
 
-The suite has **89 tests**, all offline and deterministic: no test makes a
+Every test in the suite is offline and deterministic: no test makes a
 network call or requires an API key (news fetching is disabled and the
 narrative uses the deterministic fallback). It runs under both `pytest`
 (used in CI) and `unittest`:
@@ -404,7 +438,7 @@ tests/
   test_report_service.py  # report generation use case
   test_data_ingestion.py  # official CSV ingestion into the SQLite cache
   test_job_store.py       # job stores (in-memory and SQLite)
-  test_worker.py          # async worker, including retry with resumption
+  test_worker.py          # async worker, retry and orphan recovery
   test_api.py             # HTTP endpoints (jobs, retry, artifact, metrics)
 ```
 
