@@ -5,6 +5,7 @@ orquestrador (src/agents/report_pipeline.py) e os agentes de ingestão,
 análise e escrita de relatório.
 """
 
+import json
 import tempfile
 import threading
 import unittest
@@ -175,6 +176,38 @@ class TestMultiAgentPipeline(TempSRAGDatabaseMixin, unittest.TestCase):
         self.assertIn("Relatório de Monitoramento de SRAG", report)
         self.assertTrue(resumed.report_path.exists())
         self.assertFalse(resumed.state_path.exists())  # estado limpo ao concluir
+
+    def test_resume_accepts_legacy_icu_metric_key_from_saved_state(self):
+        # Estado salvo antes do rename taxa_ocupacao_uti -> proporcao_casos_uti.
+        first = SRAGMultiAgentReportOrchestrator(config=self.config)
+        first.writer_agent.write = mock.Mock(
+            side_effect=RuntimeError("falha simulada na escrita")
+        )
+        with self.assertRaises(StepExecutionError):
+            first.run()
+
+        state = json.loads(first.state_path.read_text(encoding="utf-8"))
+        artifacts = state["artifacts"]
+        for metrics in (artifacts["metrics"], artifacts["analysis"]["metrics"]):
+            metrics["taxa_ocupacao_uti"] = metrics.pop("proporcao_casos_uti")
+        for finding in artifacts["analysis"]["findings"]:
+            if finding["kind"] == "uti":
+                finding["message"] = "Taxa de internação em UTI observada: 33.33%."
+        first.state_path.write_text(json.dumps(state), encoding="utf-8")
+
+        resumed = SRAGMultiAgentReportOrchestrator(
+            config=self.config,
+            execution_id=first.execution_id,
+        )
+        resumed.ingestion_agent = None  # não pode recoletar
+        report = resumed.run()
+
+        # Amostra: 4 de 12 casos com internação em UTI.
+        self.assertIn("**33.33%** dos casos registrados tiveram internação em UTI", report)
+        self.assertIn("Proporção de casos com internação em UTI: 33.33%.", report)
+        self.assertNotIn("Taxa de internação em UTI observada", report)
+        self.assertNotIn("taxa_ocupacao_uti", resumed.last_metrics)
+        self.assertAlmostEqual(resumed.last_metrics["proporcao_casos_uti"], 4 / 12 * 100)
 
     def test_ingestion_agent_collects_snapshot_with_source_metadata(self):
         snapshot = SUSDataIngestionAgent(self.config).collect(

@@ -28,6 +28,8 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
   notificados com internação em UTI. Renomeado para `proporcao_casos_uti`
   ("Proporção de Casos com Internação em UTI") em métricas, relatório, validadores
   e documentação; as recomendações passam a citar o limiar heurístico de 30%.
+  Estado de pipeline salvo antes do rename (retry de job antigo) é migrado na
+  retomada, para o indicador não aparecer como 0,00%.
 - `claim_next` do store SQLite passa a ser atômico entre processos
   (`BEGIN IMMEDIATE` + checagem de `rowcount`); antes, dois workers podiam
   executar o mesmo job.
@@ -35,6 +37,8 @@ versões seguem [SemVer](https://semver.org/lang/pt-BR/).
 ### Removido
 - `src/agents/orchestrator.py`: orquestrador legado (LangGraph) sem nenhum import,
   com ano 2024 fixo e manipulação de `sys.path`. O pipeline em uso é `agents/report_pipeline.py`.
+- Dependência direta `langgraph`, sem uso no código (segue no lockfile apenas como
+  dependência transitiva de `langchain`).
 
 ### Segurança
 - API: `db_path` e `output_dir` deixam de aceitar caminhos arbitrários do cliente.

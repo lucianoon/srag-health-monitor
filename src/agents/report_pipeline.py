@@ -33,6 +33,45 @@ def new_execution_id() -> str:
     return datetime.now().strftime("%Y%m%d_%H%M%S_%f")
 
 
+# Chaves de métricas renomeadas: estado de pipeline salvo antes do rename
+# (retry de job antigo) ainda traz a chave antiga.
+LEGACY_METRIC_KEYS = {"taxa_ocupacao_uti": "proporcao_casos_uti"}
+
+
+def upgrade_legacy_artifacts(artifacts: dict) -> bool:
+    """Migra, no lugar, artefatos persistidos com chaves de métricas antigas.
+
+    Cobre as métricas coletadas e as embutidas na análise; o achado de UTI
+    da análise é refeito para usar o rótulo atual. Retorna True se algo foi
+    migrado. Sem isto, a retomada leria a chave nova ausente e o relatório
+    mostraria 0,00% no indicador.
+    """
+    analysis = artifacts.get("analysis")
+    targets = [artifacts.get("metrics")]
+    if isinstance(analysis, dict):
+        targets.append(analysis.get("metrics"))
+
+    migrated = False
+    for metrics in targets:
+        if not isinstance(metrics, dict):
+            continue
+        for old_key, new_key in LEGACY_METRIC_KEYS.items():
+            if old_key in metrics:
+                value = metrics.pop(old_key)
+                metrics.setdefault(new_key, value)
+                migrated = True
+
+    if migrated and isinstance(analysis, dict) and isinstance(analysis.get("metrics"), dict):
+        value = analysis["metrics"].get("proporcao_casos_uti", 0.0)
+        analysis["findings"] = [
+            EpidemiologyAnalysisAgent.uti_finding(value)
+            if isinstance(finding, dict) and finding.get("kind") == "uti"
+            else finding
+            for finding in analysis.get("findings", [])
+        ]
+    return migrated
+
+
 class SRAGMultiAgentReportOrchestrator:
     """Coordena ingestão, análise epidemiológica e escrita de relatório."""
 
@@ -70,6 +109,11 @@ class SRAGMultiAgentReportOrchestrator:
             self.execution_id,
         )
         blackboard = ReportBlackboard(self._build_steps(), state_path=self.state_path)
+        if upgrade_legacy_artifacts(blackboard.artifacts):
+            logger.info(
+                "Estado de pipeline com chaves de métricas antigas migrado - ID: %s",
+                self.execution_id,
+            )
         artifacts = blackboard.run()
 
         self.last_metrics = artifacts["metrics"]
