@@ -1,0 +1,9 @@
+# Canonicaliza as identidades do dono do repositório para git log/shortlog/blame.
+# Não reescreve o histórico; só altera a exibição das identidades mapeadas.
+Luciano de Oliveira Nunes <195664088+lucianoon@users.noreply.github.com>
+Luciano de Oliveira Nunes <195664088+lucianoon@users.noreply.github.com> Luciano de Oliveira Nunes <lucianomevam@outlook.com>
+Luciano de Oliveira Nunes <195664088+lucianoon@users.noreply.github.com> LUCIANO DE OLIVEIRA NUNES <lucianomevam@outlook.com>
+Luciano de Oliveira Nunes <195664088+lucianoon@users.noreply.github.com> Luciano De Oliveira Nunes <luciano.nunes@aircompany.ai>
+Luciano de Oliveira Nunes <195664088+lucianoon@users.noreply.github.com> Luciano <prradical@gmail.com>
+Luciano de Oliveira Nunes <195664088+lucianoon@users.noreply.github.com> Luciano Nunes <lucianoon@users.noreply.github.com>
+Luciano de Oliveira Nunes <195664088+lucianoon@users.noreply.github.com> AI Engineer <ai-engineer@example.com>
