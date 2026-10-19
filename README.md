@@ -177,13 +177,17 @@ curl http://localhost:8000/reports/<job_id>
 Ingerir dados oficiais do SUS/OpenDATASUS antes de gerar relatórios reais:
 
 ```bash
-SRAG_SUS_DATA_URL="https://..." make ingest
+SRAG_SUS_DATA_URL="<URL_DO_CSV>" make ingest
 ```
+
+`<URL_DO_CSV>` é a URL do **arquivo CSV**, não a da página do dataset. Pegue no
+[portal OpenDATASUS](https://opendatasus.saude.gov.br/dataset/srag-2021-a-2024),
+em "Recursos".
 
 Para smoke test com amostra:
 
 ```bash
-.venv/bin/python ingest.py --source-url "https://..." --nrows 1000
+.venv/bin/python ingest.py --source-url "<URL_DO_CSV>" --nrows 1000
 ```
 
 Quando `SRAG_API_KEY` estiver configurada, envie o cabeçalho:
@@ -364,7 +368,7 @@ Executa geração síncrona. Útil para debug e integração interna.
 Ingestão de dados oficiais:
 
 ```bash
-.venv/bin/python ingest.py --source-url "https://..."
+.venv/bin/python ingest.py --source-url "<URL_DO_CSV>"
 ```
 
 Geração síncrona via CLI:

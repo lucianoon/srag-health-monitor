@@ -183,13 +183,17 @@ curl http://localhost:8000/reports/<job_id>
 Ingest official SUS/OpenDATASUS data before generating real reports:
 
 ```bash
-SRAG_SUS_DATA_URL="https://..." make ingest
+SRAG_SUS_DATA_URL="<CSV_URL>" make ingest
 ```
+
+`<CSV_URL>` is the URL of the **CSV file**, not the dataset page. Grab it from
+the [OpenDATASUS portal](https://opendatasus.saude.gov.br/dataset/srag-2021-a-2024)
+under "Recursos" (resources).
 
 For a smoke test on a sample:
 
 ```bash
-.venv/bin/python ingest.py --source-url "https://..." --nrows 1000
+.venv/bin/python ingest.py --source-url "<CSV_URL>" --nrows 1000
 ```
 
 When `SRAG_API_KEY` is configured, send the header:
@@ -370,7 +374,7 @@ Runs generation synchronously. Useful for debugging and internal integration.
 Ingest official data:
 
 ```bash
-.venv/bin/python ingest.py --source-url "https://..."
+.venv/bin/python ingest.py --source-url "<CSV_URL>"
 ```
 
 Generate a report synchronously:
